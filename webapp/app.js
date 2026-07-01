@@ -1,5 +1,6 @@
 const STORAGE_KEY = "weeklyResourcePlanningDrafts";
 const DELETED_WEEKS_KEY = "weeklyResourcePlanningDeletedWeeks";
+const PROJECT_META_KEY = "weeklyResourcePlanningProjects";
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const state = {
@@ -30,8 +31,10 @@ const el = {
   roleSelect: document.querySelector("#roleSelect"),
   projectSelect: document.querySelector("#projectSelect"),
   resourceCount: document.querySelector("#resourceCount"),
+  resourceMetric: document.querySelector("#resourceMetric"),
   assignmentCount: document.querySelector("#assignmentCount"),
   projectCount: document.querySelector("#projectCount"),
+  projectMetric: document.querySelector("#projectMetric"),
   updatedText: document.querySelector("#updatedText"),
   pageTitle: document.querySelector("#pageTitle"),
   planningHead: document.querySelector("#planningHead"),
@@ -106,6 +109,8 @@ function hydrateFilters() {
     state.project = event.target.value;
     render();
   });
+  el.resourceMetric.addEventListener("click", openResourceManager);
+  el.projectMetric.addEventListener("click", openProjectManager);
   el.gridTab.addEventListener("click", () => setView("grid"));
   el.summaryTab.addEventListener("click", () => setView("summary"));
   el.personSummaryTab.addEventListener("click", () => setView("person"));
@@ -173,7 +178,7 @@ function renderFilterOptions() {
     .map((week) => `<option value="${escapeAttr(week.id)}">${escapeHtml(week.title)}</option>`)
     .join("");
   el.roleSelect.innerHTML = optionList(["All", ...state.data.roles]);
-  el.projectSelect.innerHTML = optionList(["All", ...state.data.projects]);
+  el.projectSelect.innerHTML = optionList(["All", ...activeProjects()]);
   el.weekSelect.value = state.weekId;
   el.roleSelect.value = state.role;
   el.projectSelect.value = state.project;
@@ -190,6 +195,26 @@ function renderFilterOptions() {
 
 function optionList(values) {
   return values.map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("");
+}
+
+function activeProjects() {
+  return state.data.projects.filter((project) => {
+    const definition = projectDefinition(project);
+    return !definition.inactive && !definition.deleted;
+  });
+}
+
+function projectDefinition(project) {
+  if (!state.data.projectMeta) state.data.projectMeta = {};
+  if (!state.data.projectMeta[project]) {
+    state.data.projectMeta[project] = {
+      manager: "",
+      budgetDays: "",
+      inactive: false,
+      deleted: false
+    };
+  }
+  return state.data.projectMeta[project];
 }
 
 function setView(view) {
@@ -239,6 +264,7 @@ function createBlankWeek() {
       name: resource.name,
       jiraName: resource.jiraName,
       role: resource.role,
+      inactive: Boolean(resource.inactive),
       notes: "",
       assignments: cloneAssignments(resource.assignments)
     })),
@@ -298,6 +324,7 @@ function cloneAssignments(assignments) {
 
 function filteredResources(week) {
   return week.resources.filter((resource) => {
+    if (resource.inactive) return false;
     const haystack = [
       resource.name,
       resource.jiraName,
@@ -835,7 +862,7 @@ function openPlanningForm(context) {
         <span>Project</span>
         <input id="planProject" name="project" list="projectOptions" value="${escapeAttr(existingProject)}" placeholder="Project name">
         <datalist id="projectOptions">
-          ${state.data.projects.map((project) => `<option value="${escapeAttr(project)}"></option>`).join("")}
+          ${activeProjects().map((project) => `<option value="${escapeAttr(project)}"></option>`).join("")}
         </datalist>
       </label>
 
@@ -893,6 +920,340 @@ function onModalAction(event) {
   if (action === "remove-person") removePersonFromPlan(event.target.dataset.person);
   if (action === "delete-plan") deletePlan();
   if (action === "confirm-delete-week") deleteLatestWeek();
+  if (action === "resource-new") openResourceForm("new");
+  if (action === "resource-edit") openResourceForm("edit", event.target.dataset.resource);
+  if (action === "resource-save") saveResource();
+  if (action === "resource-delete") deleteResource(event.target.dataset.resource);
+  if (action === "resource-toggle-active") toggleResourceActive(event.target.dataset.resource);
+  if (action === "resource-manager") openResourceManager();
+  if (action === "project-new") openProjectForm("new");
+  if (action === "project-edit") openProjectForm("edit", event.target.dataset.project);
+  if (action === "project-save") saveProject();
+  if (action === "project-delete") deleteProject(event.target.dataset.project);
+  if (action === "project-toggle-active") toggleProjectActive(event.target.dataset.project);
+  if (action === "project-manager") openProjectManager();
+}
+
+function openProjectManager() {
+  state.planningContext = { action: "project-manager" };
+  el.modalTitle.textContent = "Projects";
+  const projects = state.data.projects.filter((project) => !projectDefinition(project).deleted);
+  el.modalMeta.textContent = `${projects.length} total`;
+  el.modalBody.innerHTML = `
+    <div class="resource-toolbar">
+      <button type="button" data-action="project-new">New project</button>
+    </div>
+    <div class="resource-list">
+      ${projects.map((project) => {
+        const definition = projectDefinition(project);
+        return `
+          <div class="resource-row ${definition.inactive ? "inactive" : ""}">
+            <div>
+              <strong>${escapeHtml(project)}</strong>
+              <span>${escapeHtml(definition.manager || "No manager")} - ${formatProjectBudget(definition.budgetDays)}</span>
+              ${definition.inactive ? `<em>Inactive</em>` : ""}
+            </div>
+            <div class="resource-actions">
+              <button type="button" data-action="project-edit" data-project="${escapeAttr(project)}">Edit</button>
+              <button type="button" data-action="project-toggle-active" data-project="${escapeAttr(project)}">${definition.inactive ? "Activate" : "Inactivate"}</button>
+              <button class="danger" type="button" data-action="project-delete" data-project="${escapeAttr(project)}">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    <div class="modal-actions">
+      <button type="button" data-action="close-modal">Close</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function openProjectForm(mode, projectName = "") {
+  const definition = mode === "edit"
+    ? projectDefinition(projectName)
+    : { manager: "", budgetDays: "", inactive: false };
+  const people = uniquePeople();
+
+  state.planningContext = { action: "project-form", mode, originalName: projectName };
+  el.modalTitle.textContent = mode === "edit" ? "Edit project" : "New project";
+  el.modalMeta.textContent = "Project definition";
+  el.modalBody.innerHTML = `
+    <form id="projectForm" class="plan-form">
+      <label>
+        <span>Project</span>
+        <input id="definitionProjectName" value="${escapeAttr(projectName)}" placeholder="Project name">
+      </label>
+      <label>
+        <span>Project manager</span>
+        <input id="definitionProjectManager" value="${escapeAttr(definition.manager || "")}" list="projectManagerOptions" placeholder="Select manager">
+        <datalist id="projectManagerOptions">
+          ${people.map((name) => `<option value="${escapeAttr(name)}"></option>`).join("")}
+        </datalist>
+      </label>
+      <label>
+        <span>Project budget (days)</span>
+        <input id="definitionProjectBudget" type="number" min="0" step="0.5" value="${escapeAttr(definition.budgetDays || "")}" placeholder="0">
+      </label>
+      <label class="checkbox-field">
+        <input id="definitionProjectInactive" type="checkbox" ${definition.inactive ? "checked" : ""}>
+        <span>Inactive</span>
+      </label>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="project-manager">Cancel</button>
+        <button type="button" data-action="project-save">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function saveProject() {
+  const context = state.planningContext;
+  if (!context || context.action !== "project-form") return;
+
+  const name = document.querySelector("#definitionProjectName").value.trim();
+  const manager = document.querySelector("#definitionProjectManager").value.trim();
+  const budgetDays = document.querySelector("#definitionProjectBudget").value;
+  const inactive = document.querySelector("#definitionProjectInactive").checked;
+  if (!name) {
+    document.querySelector("#definitionProjectName").focus();
+    return;
+  }
+
+  const duplicate = state.data.projects.some((project) =>
+    project === name && project !== context.originalName && !projectDefinition(project).deleted
+  );
+  if (duplicate) {
+    openInfoModal("Project already exists", "A project with this name already exists.");
+    return;
+  }
+
+  if (context.mode === "new") {
+    state.data.projects.push(name);
+  } else if (context.originalName !== name) {
+    renameProject(context.originalName, name);
+  }
+
+  state.data.projects = Array.from(new Set(state.data.projects)).sort();
+  state.data.projectMeta[name] = { manager, budgetDays, inactive, deleted: false };
+  if (context.originalName && context.originalName !== name) {
+    delete state.data.projectMeta[context.originalName];
+  }
+
+  saveProjectDefinitions();
+  renderFilterOptions();
+  render();
+  openProjectManager();
+}
+
+function renameProject(oldName, newName) {
+  state.data.projects = state.data.projects.map((project) => project === oldName ? newName : project);
+  state.data.weeks.forEach((week) => {
+    let changed = false;
+    week.resources.forEach((resource) => {
+      Object.values(resource.assignments).forEach((day) => {
+        ["am", "pm"].forEach((period) => {
+          if (day[period] === oldName) {
+            day[period] = newName;
+            changed = true;
+          }
+        });
+      });
+    });
+    if (changed) week.draft = true;
+  });
+  saveDrafts();
+}
+
+function deleteProject(projectName) {
+  state.data.projects = state.data.projects.filter((project) => project !== projectName);
+  state.data.projectMeta[projectName] = {
+    ...projectDefinition(projectName),
+    deleted: true
+  };
+  state.data.weeks.forEach((week) => {
+    let changed = false;
+    week.resources.forEach((resource) => {
+      Object.values(resource.assignments).forEach((day) => {
+        ["am", "pm"].forEach((period) => {
+          if (day[period] === projectName) {
+            day[period] = "";
+            day[`${period}Room`] = false;
+            changed = true;
+          }
+        });
+      });
+    });
+    if (changed) week.draft = true;
+  });
+  if (state.project === projectName) state.project = "All";
+  state.projectReportProjects = state.projectReportProjects.filter((project) => project !== projectName);
+  saveProjectDefinitions();
+  saveDrafts();
+  renderFilterOptions();
+  render();
+  openProjectManager();
+}
+
+function toggleProjectActive(projectName) {
+  const definition = projectDefinition(projectName);
+  definition.inactive = !definition.inactive;
+  if (definition.inactive && state.project === projectName) state.project = "All";
+  saveProjectDefinitions();
+  renderFilterOptions();
+  render();
+  openProjectManager();
+}
+
+function formatProjectBudget(value) {
+  if (value === "" || value === null || value === undefined) return "No budget";
+  return `${Number(value).toLocaleString("tr-TR")} days budget`;
+}
+
+function openResourceManager() {
+  const week = currentWeek();
+  state.planningContext = { action: "resource-manager" };
+  el.modalTitle.textContent = "Resources";
+  el.modalMeta.textContent = `${week.title} - ${week.resources.length} total`;
+  el.modalBody.innerHTML = `
+    <div class="resource-toolbar">
+      <button type="button" data-action="resource-new">New resource</button>
+    </div>
+    <div class="resource-list">
+      ${week.resources.map((resource) => `
+        <div class="resource-row ${resource.inactive ? "inactive" : ""}">
+          <div>
+            <strong>${escapeHtml(resource.name)}</strong>
+            <span>${escapeHtml(resource.role || "-")} - ${escapeHtml(resource.jiraName || "-")}</span>
+            ${resource.inactive ? `<em>Inactive</em>` : ""}
+          </div>
+          <div class="resource-actions">
+            <button type="button" data-action="resource-edit" data-resource="${escapeAttr(resource.name)}">Edit</button>
+            <button type="button" data-action="resource-toggle-active" data-resource="${escapeAttr(resource.name)}">${resource.inactive ? "Activate" : "Inactivate"}</button>
+            <button class="danger" type="button" data-action="resource-delete" data-resource="${escapeAttr(resource.name)}">Delete</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="modal-actions">
+      <button type="button" data-action="close-modal">Close</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function openResourceForm(mode, resourceName = "") {
+  const week = currentWeek();
+  const resource = mode === "edit"
+    ? week.resources.find((item) => item.name === resourceName)
+    : { name: "", jiraName: "", role: "" };
+  if (!resource) return;
+
+  state.planningContext = { action: "resource-form", mode, originalName: resourceName };
+  el.modalTitle.textContent = mode === "edit" ? "Edit resource" : "New resource";
+  el.modalMeta.textContent = week.title;
+  el.modalBody.innerHTML = `
+    <form id="resourceForm" class="plan-form">
+      <label>
+        <span>Name</span>
+        <input id="resourceName" value="${escapeAttr(resource.name)}" placeholder="Resource name">
+      </label>
+      <label>
+        <span>Name in Jira</span>
+        <input id="resourceJiraName" value="${escapeAttr(resource.jiraName || "")}" placeholder="Jira name">
+      </label>
+      <label>
+        <span>Role</span>
+        <input id="resourceRole" value="${escapeAttr(resource.role || "")}" list="resourceRoleOptions" placeholder="Role">
+        <datalist id="resourceRoleOptions">
+          ${state.data.roles.map((role) => `<option value="${escapeAttr(role)}"></option>`).join("")}
+        </datalist>
+      </label>
+      <label class="checkbox-field">
+        <input id="resourceInactive" type="checkbox" ${resource.inactive ? "checked" : ""}>
+        <span>Inactive</span>
+      </label>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="resource-manager">Cancel</button>
+        <button type="button" data-action="resource-save">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function saveResource() {
+  const context = state.planningContext;
+  if (!context || context.action !== "resource-form") return;
+
+  const week = currentWeek();
+  const name = document.querySelector("#resourceName").value.trim();
+  const jiraName = document.querySelector("#resourceJiraName").value.trim();
+  const role = document.querySelector("#resourceRole").value.trim();
+  const inactive = document.querySelector("#resourceInactive").checked;
+  if (!name) {
+    document.querySelector("#resourceName").focus();
+    return;
+  }
+
+  const duplicate = week.resources.some((resource) =>
+    resource.name === name && resource.name !== context.originalName
+  );
+  if (duplicate) {
+    openInfoModal("Resource already exists", "A resource with this name already exists in the selected week.");
+    return;
+  }
+
+  if (context.mode === "new") {
+    week.resources.push({
+      name,
+      jiraName,
+      role,
+      notes: "",
+      inactive,
+      assignments: blankAssignments()
+    });
+  } else {
+    const resource = week.resources.find((item) => item.name === context.originalName);
+    if (!resource) return;
+    resource.name = name;
+    resource.jiraName = jiraName;
+    resource.role = role;
+    resource.inactive = inactive;
+  }
+
+  if (role && !state.data.roles.includes(role)) {
+    state.data.roles.push(role);
+    state.data.roles.sort();
+  }
+
+  week.draft = true;
+  saveDrafts();
+  renderFilterOptions();
+  render();
+  openResourceManager();
+}
+
+function deleteResource(resourceName) {
+  const week = currentWeek();
+  const index = week.resources.findIndex((resource) => resource.name === resourceName);
+  if (index < 0) return;
+  week.resources.splice(index, 1);
+  week.draft = true;
+  saveDrafts();
+  renderFilterOptions();
+  render();
+  openResourceManager();
+}
+
+function toggleResourceActive(resourceName) {
+  const week = currentWeek();
+  const resource = week.resources.find((item) => item.name === resourceName);
+  if (!resource) return;
+  resource.inactive = !resource.inactive;
+  week.draft = true;
+  saveDrafts();
+  render();
+  openResourceManager();
 }
 
 function deleteLatestWeek() {
@@ -1019,6 +1380,8 @@ function approvePlan() {
   if (!state.data.projects.includes(project)) {
     state.data.projects.push(project);
     state.data.projects.sort();
+    projectDefinition(project);
+    saveProjectDefinitions();
     state.project = "All";
     renderFilterOptions();
   }
@@ -1042,8 +1405,9 @@ function closeModal() {
 function mergeSavedDrafts(data) {
   const saved = loadDrafts();
   const deleted = new Set(loadDeletedWeeks());
+  const projectMeta = loadProjectDefinitions();
   const sourceWeeks = data.weeks.filter((week) => !deleted.has(week.id));
-  if (!saved.length) return { ...data, weeks: sourceWeeks };
+  if (!saved.length) return { ...data, weeks: sourceWeeks, projectMeta };
   const baseWeeks = sourceWeeks.filter((week) => !saved.some((draft) => draft.id === week.id));
   const weeks = [...saved, ...baseWeeks].sort((a, b) => parseWeekDate(b.title) - parseWeekDate(a.title));
   const projects = Array.from(new Set([...data.projects, ...saved.flatMap(weekProjects)])).sort();
@@ -1051,7 +1415,7 @@ function mergeSavedDrafts(data) {
     ...data.roles,
     ...saved.flatMap((week) => week.resources.map((resource) => resource.role).filter(Boolean))
   ])).sort();
-  return { ...data, weeks, projects, roles };
+  return { ...data, weeks, projects, roles, projectMeta };
 }
 
 function weekProjects(week) {
@@ -1076,9 +1440,21 @@ function loadDeletedWeeks() {
   }
 }
 
+function loadProjectDefinitions() {
+  try {
+    return JSON.parse(localStorage.getItem(PROJECT_META_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
 function saveDrafts() {
   const drafts = state.data.weeks.filter((week) => week.draft);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+}
+
+function saveProjectDefinitions() {
+  localStorage.setItem(PROJECT_META_KEY, JSON.stringify(state.data.projectMeta || {}));
 }
 
 function parseWeekDate(value) {
@@ -1133,6 +1509,7 @@ function formatInputDate(date) {
 }
 
 function normalizeData(data) {
+  const projectMeta = data.projectMeta || {};
   const seen = new Set();
   const weeks = [];
   data.weeks.forEach((week) => {
@@ -1153,7 +1530,22 @@ function normalizeData(data) {
     });
   });
   weeks.sort((a, b) => parseWeekDate(b.title) - parseWeekDate(a.title));
-  return { ...data, weeks };
+  const deletedProjects = Object.entries(projectMeta)
+    .filter(([, definition]) => definition?.deleted)
+    .map(([project]) => project);
+  const projects = Array.from(new Set([
+    ...data.projects,
+    ...weeks.flatMap(weekProjects),
+    ...Object.keys(projectMeta)
+  ]))
+    .filter((project) => !deletedProjects.includes(project))
+    .sort();
+  projects.forEach((project) => {
+    if (!projectMeta[project]) {
+      projectMeta[project] = { manager: "", budgetDays: "", inactive: false, deleted: false };
+    }
+  });
+  return { ...data, weeks, projects, projectMeta };
 }
 
 function pad2(value) {

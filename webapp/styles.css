@@ -142,6 +142,17 @@ select {
   border-radius: 8px;
   padding: 13px;
   background: #202c3a;
+  color: #fff;
+  text-align: left;
+}
+
+.metric-button {
+  cursor: pointer;
+}
+
+.metric-button:hover {
+  border-color: #70c1a0;
+  background: #263848;
 }
 
 .metric strong {
@@ -765,6 +776,72 @@ select {
   cursor: pointer;
   padding: 5px 9px;
   font-weight: 700;
+}
+
+.resource-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.resource-toolbar button,
+.resource-actions button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 5px 9px;
+  font-weight: 600;
+}
+
+.resource-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.resource-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: #fff;
+}
+
+.resource-row.inactive {
+  background: #f6f7f9;
+  opacity: 0.76;
+}
+
+.resource-row strong,
+.resource-row span,
+.resource-row em {
+  display: block;
+}
+
+.resource-row span,
+.resource-row em {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.resource-actions button.danger {
+  border-color: #f1b8af;
+  background: #fff1f0;
+  color: var(--red);
 }
 
 .plan-form {
