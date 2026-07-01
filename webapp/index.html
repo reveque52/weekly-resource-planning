@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Weekly Resource Planning</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="assets/fit-global-logo.jpg" alt="FIT Global SAP Silver Partner">
+          <div>
+            <h1>Weekly Planning</h1>
+            <p>Resource allocation</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Week</span>
+          <div class="week-picker">
+            <button id="prevWeekButton" type="button" title="Previous week">&lt;</button>
+            <select id="weekSelect"></select>
+            <button id="nextWeekButton" type="button" title="Next week">&gt;</button>
+          </div>
+          <button id="newWeekButton" class="sidebar-action" type="button">New week from draft</button>
+          <button id="clearWeekButton" class="sidebar-action danger" type="button">Delete latest week</button>
+        </label>
+
+        <label class="field">
+          <span>Search</span>
+          <input id="searchInput" type="search" placeholder="Name, Jira, project">
+        </label>
+
+        <label class="field">
+          <span>Role</span>
+          <select id="roleSelect"></select>
+        </label>
+
+        <label class="field">
+          <span>Project</span>
+          <select id="projectSelect"></select>
+        </label>
+
+        <div class="metric-stack">
+          <div class="metric">
+            <strong id="resourceCount">0</strong>
+            <span>resources</span>
+          </div>
+          <div class="metric">
+            <strong id="assignmentCount">0</strong>
+            <span>half-day slots</span>
+          </div>
+          <div class="metric">
+            <strong id="projectCount">0</strong>
+            <span>projects</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="updatedText">Updated</p>
+            <h2 id="pageTitle">Resource Plan</h2>
+          </div>
+          <div class="view-tabs" role="tablist" aria-label="Views">
+            <button class="active" id="gridTab" type="button">Grid</button>
+            <button id="summaryTab" type="button">Summary</button>
+            <button id="personSummaryTab" type="button">Person Summary</button>
+            <button id="projectReportTab" type="button">Project Report</button>
+          </div>
+        </header>
+
+        <section id="gridView" class="planning-panel">
+          <div class="table-wrap">
+            <table class="planning-table">
+              <thead id="planningHead"></thead>
+              <tbody id="planningBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="summaryView" class="summary-panel hidden">
+          <div class="summary-layout">
+            <div>
+              <h3>Project Load</h3>
+              <div id="projectBars" class="bars"></div>
+            </div>
+            <div>
+              <h3>Role Split</h3>
+              <div id="roleBars" class="bars compact"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="personSummaryView" class="summary-panel hidden">
+          <div class="person-summary-toolbar">
+            <label>
+              <span>Person</span>
+              <select id="personSummarySelect"></select>
+            </label>
+            <label>
+              <span>Period</span>
+              <select id="personPeriodSelect">
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+                <option value="year">Yearly</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="person-summary-layout">
+            <div class="pie-card">
+              <div id="personPie" class="pie-chart"></div>
+              <div>
+                <p class="eyebrow" id="personSummaryMeta"></p>
+                <h3 id="personSummaryTitle">Person Load</h3>
+                <p id="personSummaryTotal" class="summary-total"></p>
+              </div>
+            </div>
+            <div>
+              <h3>Time Distribution</h3>
+              <div id="personLegend" class="pie-legend"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="projectReportView" class="summary-panel hidden">
+          <div class="person-summary-toolbar">
+            <label>
+              <span>Period</span>
+              <select id="projectReportPeriod">
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+                <option value="year">Yearly</option>
+                <option value="custom">Date range</option>
+              </select>
+            </label>
+            <label>
+              <span>From</span>
+              <input id="projectReportStart" type="date">
+            </label>
+            <label>
+              <span>To</span>
+              <input id="projectReportEnd" type="date">
+            </label>
+            <label>
+              <span>Role</span>
+              <select id="projectReportRole">
+                <option value="All">All</option>
+                <option value="Func">Functional</option>
+                <option value="Abap">ABAP</option>
+              </select>
+            </label>
+            <label class="wide-filter">
+              <span>Projects</span>
+              <div class="project-picker" id="projectReportProjectPicker">
+                <button id="projectReportProjectToggle" class="project-picker-toggle" type="button">All projects</button>
+                <div id="projectReportProjectMenu" class="project-picker-menu hidden">
+                  <input id="projectReportProjectSearch" type="search" placeholder="Search project">
+                  <div class="project-picker-actions">
+                    <button id="projectReportSelectAll" type="button">Select all</button>
+                    <button id="projectReportClearProjects" type="button">Clear</button>
+                  </div>
+                  <div id="projectReportProjects" class="project-options"></div>
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div class="person-summary-layout">
+            <div class="pie-card">
+              <div id="projectReportPie" class="pie-chart"></div>
+              <div>
+                <p class="eyebrow" id="projectReportMeta"></p>
+                <h3>Project Time Report</h3>
+                <p id="projectReportTotal" class="summary-total"></p>
+              </div>
+            </div>
+            <div>
+              <h3>Project Distribution</h3>
+              <div id="projectReportLegend" class="pie-legend"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="projectModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-card">
+        <button id="modalClose" class="modal-close" type="button" title="Close">x</button>
+        <p id="modalMeta" class="eyebrow"></p>
+        <h3 id="modalTitle"></h3>
+        <div id="modalBody"></div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
