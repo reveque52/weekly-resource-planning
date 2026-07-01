@@ -7,7 +7,35 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <div class="app-shell">
+    <section id="loginScreen" class="login-screen">
+      <div class="login-panel">
+        <div class="brand login-brand">
+          <img class="brand-logo" src="assets/fit-global-logo.jpg" alt="FIT Global SAP Silver Partner">
+          <div>
+            <h1>Weekly Planning</h1>
+            <p>Resource allocation</p>
+          </div>
+        </div>
+        <form id="loginForm" class="login-form" autocomplete="on">
+          <label>
+            <span>User name or email</span>
+            <input id="loginIdentity" name="username" autocomplete="username" placeholder="admin@company.local">
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password disabled for now" disabled>
+          </label>
+          <p id="loginMessage" class="login-message"></p>
+          <button type="submit">Sign in</button>
+          <div class="login-links">
+            <button id="forgotPasswordButton" type="button">Forgot password</button>
+            <button id="changePasswordButton" type="button">Change password</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <div id="appShell" class="app-shell hidden">
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="assets/fit-global-logo.jpg" alt="FIT Global SAP Silver Partner">
@@ -65,11 +93,19 @@
             <p class="eyebrow" id="updatedText">Updated</p>
             <h2 id="pageTitle">Resource Plan</h2>
           </div>
-          <div class="view-tabs" role="tablist" aria-label="Views">
-            <button class="active" id="gridTab" type="button">Grid</button>
-            <button id="summaryTab" type="button">Summary</button>
-            <button id="personSummaryTab" type="button">Person Summary</button>
-            <button id="projectReportTab" type="button">Project Report</button>
+          <div class="topbar-actions">
+            <div class="view-tabs" role="tablist" aria-label="Views">
+              <button class="active" id="gridTab" type="button">Grid</button>
+              <button id="summaryTab" type="button">Summary</button>
+              <button id="personSummaryTab" type="button">Person Summary</button>
+              <button id="projectReportTab" type="button">Project Report</button>
+              <button id="orgTab" type="button">Organization</button>
+            </div>
+            <div class="user-menu">
+              <button id="approveWeekButton" class="approve-button hidden" type="button">Approve draft</button>
+              <button id="currentUserButton" type="button"></button>
+              <button id="logoutButton" type="button">Sign out</button>
+            </div>
           </div>
         </header>
 
@@ -184,6 +220,17 @@
               <div id="projectReportLegend" class="pie-legend"></div>
             </div>
           </div>
+        </section>
+
+        <section id="orgView" class="summary-panel hidden">
+          <div class="org-header">
+            <div>
+              <p class="eyebrow">Organization</p>
+              <h3>Reporting Lines</h3>
+            </div>
+            <button id="orgManageButton" type="button">Manage users</button>
+          </div>
+          <div id="orgChart" class="org-chart"></div>
         </section>
       </main>
     </div>
