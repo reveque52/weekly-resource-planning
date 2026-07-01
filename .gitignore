@@ -2,3 +2,5 @@ desktop.ini
 *.xlsx
 node_modules/
 .DS_Store
+*.bak
+.claude/
