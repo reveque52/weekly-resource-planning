@@ -16,6 +16,7 @@ const DEFAULT_USERS = [
     username: "admin",
     password: "admin123",
     admin: true,
+    isResource: false,
     permissions: { read: true, change: true, delete: true }
   }
 ];
@@ -125,6 +126,7 @@ fetch("model/planning.json")
     state.mailQueue = loadMailQueue();
     state.teamManagers = loadTeamManagers();
     state.weekId = state.data.weeks[0]?.id || "";
+    syncResourceUsers();
     hydrateFilters();
     hydrateAuth();
   });
@@ -406,7 +408,7 @@ function createBlankWeek() {
     draft: true,
     approved: false,
     approvedAt: "",
-    resources: source.resources.map((resource) => ({
+    resources: source.resources.filter((resource) => !resource.fromUser).map((resource) => ({
       name: resource.name,
       jiraName: resource.jiraName,
       role: resource.role,
@@ -425,6 +427,7 @@ function createBlankWeek() {
     state.data.weeks.unshift(week);
   }
   state.weekId = id;
+  syncResourceUsers();
   saveDrafts();
   renderFilterOptions();
   render();
@@ -2159,6 +2162,7 @@ function normalizeUser(user) {
     role: user.role || "",
     managerId: user.managerId || "",
     active: user.active !== false,
+    isResource: user.isResource !== undefined ? Boolean(user.isResource) : Boolean(user.resourceName),
     permissions: {
       read: Boolean(user.permissions?.read || user.admin),
       change: Boolean(user.permissions?.change || user.admin),
@@ -2563,6 +2567,7 @@ function saveAuthorization() {
   if (password) user.password = password;
   if (state.currentUser.id === user.id) state.currentUser = user;
   saveUsers();
+  syncResourceUsers();
   syncUserChrome();
   if (context.returnTo === "resource-manager") {
     openResourceManager();
@@ -2672,6 +2677,7 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
         ${permissionCheckbox("userDelete", "Delete", user.permissions?.delete)}
         ${permissionCheckbox("userAdmin", "Admin", user.admin)}
         ${permissionCheckbox("userActive", "Active", user.active !== false)}
+        ${permissionCheckbox("userIsResource", "Resource", user.isResource)}
       </div>
       <div class="modal-actions">
         <button class="secondary" type="button" data-action="${cancelAction}">Cancel</button>
@@ -2689,6 +2695,66 @@ function permissionCheckbox(id, label, checked) {
       <span>${label}</span>
     </label>
   `;
+}
+
+function assignmentsAreEmpty(assignments) {
+  return Object.values(assignments || {}).every((day) => !day || (!day.am && !day.pm));
+}
+
+// Project every "Resource"-flagged user into each week's resource list so they
+// appear on the planning grid. Rows are tagged with `fromUser` (the user id) so
+// renames stay linked and non-resource users can be pruned safely.
+function syncResourceUsers() {
+  if (!state.data?.weeks?.length) return;
+  const resourceUsers = state.users.filter((user) => user.isResource === true);
+  const byId = new Map(resourceUsers.map((user) => [user.id, user]));
+  let changed = false;
+
+  state.data.weeks.forEach((week) => {
+    // 1) Ensure a row exists for each resource user and keep it in sync.
+    resourceUsers.forEach((user) => {
+      let row = week.resources.find((resource) => resource.fromUser === user.id);
+      if (!row) {
+        // Do not duplicate an existing (planning-data) resource with the same name.
+        if (week.resources.some((resource) => !resource.fromUser && resource.name === user.name)) return;
+        week.resources.push({
+          name: user.name,
+          jiraName: user.email || "",
+          role: user.role || "",
+          inactive: !user.active,
+          notes: "",
+          assignments: blankAssignments(),
+          fromUser: user.id
+        });
+        changed = true;
+        return;
+      }
+      const desiredInactive = !user.active;
+      if (row.name !== user.name || row.role !== (user.role || "") || row.inactive !== desiredInactive) {
+        row.name = user.name;
+        row.role = user.role || "";
+        row.inactive = desiredInactive;
+        changed = true;
+      }
+    });
+
+    // 2) Prune rows whose user is gone / no longer a resource, but only when the
+    //    row has no assignment data (avoid losing real planning entries).
+    for (let index = week.resources.length - 1; index >= 0; index -= 1) {
+      const resource = week.resources[index];
+      if (!resource.fromUser) continue;
+      if (byId.has(resource.fromUser)) continue;
+      if (assignmentsAreEmpty(resource.assignments)) {
+        week.resources.splice(index, 1);
+        changed = true;
+      }
+    }
+  });
+
+  if (changed) {
+    saveDrafts();
+    renderFilterOptions();
+  }
 }
 
 function resourcesForUserDefinition() {
@@ -2779,6 +2845,7 @@ function saveUser() {
     managerId: document.querySelector("#userManager").value,
     admin: document.querySelector("#userAdmin").checked,
     active: document.querySelector("#userActive").checked,
+    isResource: document.querySelector("#userIsResource").checked,
     permissions
   };
   if (payload.admin) payload.permissions = { read: true, change: true, delete: true };
@@ -2797,6 +2864,7 @@ function saveUser() {
     if (state.currentUser.id === user.id) state.currentUser = user;
   }
   saveUsers();
+  syncResourceUsers();
   syncUserChrome();
   if (context.returnTo === "resource-manager") {
     openResourceManager();
