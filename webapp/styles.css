@@ -194,6 +194,28 @@ textarea {
   opacity: 0.38;
 }
 
+.variant-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.variant-actions button {
+  min-height: 32px;
+  border: 1px solid #405164;
+  border-radius: 6px;
+  background: #2f4053;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.variant-actions button:hover {
+  border-color: #69b58f;
+  background: #315c4f;
+}
+
 .sidebar-action {
   min-height: 38px;
   border: 1px solid #4a9b7a;
@@ -1225,6 +1247,7 @@ textarea {
 
 .resource-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
   align-items: center;
@@ -1242,6 +1265,18 @@ textarea {
   padding: 6px 10px;
 }
 
+.resource-toolbar-actions {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.excel-action-group {
+  display: inline-flex;
+  gap: 0;
+}
+
 .resource-toolbar button,
 .resource-actions button {
   min-height: 30px;
@@ -1252,6 +1287,42 @@ textarea {
   cursor: pointer;
   padding: 5px 9px;
   font-weight: 600;
+}
+
+.resource-toolbar .excel-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-color: #b8d9c2;
+  color: #17633a;
+}
+
+.resource-toolbar .excel-action + .excel-action {
+  margin-left: -1px;
+}
+
+.resource-toolbar .excel-action:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.resource-toolbar .excel-action:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.resource-toolbar .excel-action:hover {
+  background: #effaf3;
+  border-color: #37a866;
+  box-shadow: 0 0 0 3px rgba(55, 168, 102, 0.18), 0 6px 16px rgba(23, 99, 58, 0.14);
+  position: relative;
+  z-index: 1;
+}
+
+.excel-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .resource-list {
