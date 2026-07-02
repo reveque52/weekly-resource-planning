@@ -2368,11 +2368,11 @@ function openTeamMemberPicker(managerName = "") {
   });
 
   state.planningContext = { action: "team-picker", managerName };
-  el.modalTitle.textContent = "Takım üyelerini ekle";
-  el.modalMeta.textContent = managerName ? `Yönetici: ${managerName}` : "Üst seviye (yöneticisiz)";
+  el.modalTitle.textContent = "Add team member";
+  el.modalMeta.textContent = managerName ? `Manager: ${managerName}` : "Top level (no manager)";
   el.modalBody.innerHTML = `
     <div class="resource-toolbar">
-      <input id="resourceSearch" type="search" placeholder="Danışman ara">
+      <input id="resourceSearch" type="search" placeholder="Search consultant">
     </div>
     <div id="resourceList" class="resource-list">
       ${candidates.map((resource) => {
@@ -2388,13 +2388,13 @@ function openTeamMemberPicker(managerName = "") {
             </div>
             <div class="resource-actions">
               ${isMember
-                ? `<button class="danger" type="button" data-action="team-remove" data-name="${escapeAttr(name)}">Kaldır</button>`
-                : `<button type="button" data-action="team-add" data-name="${escapeAttr(name)}">Ekle</button>`}
+                ? `<button class="danger" type="button" data-action="team-remove" data-name="${escapeAttr(name)}">Remove</button>`
+                : `<button type="button" data-action="team-add" data-name="${escapeAttr(name)}">Add</button>`}
             </div>
           </div>
         `;
       }).join("")}
-      <p id="resourceEmpty" class="eyebrow ${candidates.length ? "hidden" : ""}">Eklenebilecek danışman yok</p>
+      <p id="resourceEmpty" class="eyebrow ${candidates.length ? "hidden" : ""}">No consultants to add</p>
     </div>
     <div class="modal-actions">
       <button type="button" data-action="org-cancel">Close</button>
