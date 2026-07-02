@@ -4,7 +4,10 @@ const PROJECT_META_KEY = "weeklyResourcePlanningProjects";
 const USERS_KEY = "weeklyResourcePlanningUsers";
 const SESSION_KEY = "weeklyResourcePlanningSession";
 const MAIL_QUEUE_KEY = "weeklyResourcePlanningMailQueue";
+const TEAM_MANAGERS_KEY = "weeklyResourcePlanningTeamManagers";
+const ROLES_KEY = "weeklyResourcePlanningRoles";
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DEFAULT_ROLES = ["ABAP", "Functional", "Team Lead", "Project Manager", "CEO"];
 const DEFAULT_USERS = [
   {
     id: "admin",
@@ -34,6 +37,8 @@ const state = {
   projectReportEnd: "",
   projectReportProjects: [],
   mailQueue: [],
+  teamManagers: {},
+  notesOpen: false,
   activeSelection: null,
   planningContext: null
 };
@@ -68,6 +73,7 @@ const el = {
   orgView: document.querySelector("#orgView"),
   orgChart: document.querySelector("#orgChart"),
   orgManageButton: document.querySelector("#orgManageButton"),
+  orgAddButton: document.querySelector("#orgAddButton"),
   projectBars: document.querySelector("#projectBars"),
   roleBars: document.querySelector("#roleBars"),
   personSummarySelect: document.querySelector("#personSummarySelect"),
@@ -114,8 +120,10 @@ fetch("model/planning.json")
   .then((response) => response.json())
   .then((data) => {
     state.data = normalizeData(mergeSavedDrafts(data));
+    state.data.roles = loadRoleDefinitions(state.data.roles);
     state.users = loadUsers();
     state.mailQueue = loadMailQueue();
+    state.teamManagers = loadTeamManagers();
     state.weekId = state.data.weeks[0]?.id || "";
     hydrateFilters();
     hydrateAuth();
@@ -199,6 +207,9 @@ function hydrateFilters() {
   el.adminTab?.addEventListener("click", openAdminPanel);
   el.approveWeekButton.addEventListener("click", approveCurrentWeek);
   el.orgManageButton.addEventListener("click", openResourceManager);
+  el.orgAddButton?.addEventListener("click", () => openTeamMemberPicker(""));
+  el.orgChart.addEventListener("click", onOrgChartClick);
+  el.planningHead.addEventListener("click", onPlanningHeaderClick);
   el.planningBody.addEventListener("click", onPlanningClick);
   el.modalClose.addEventListener("click", closeModal);
   el.projectModal.addEventListener("click", (event) => {
@@ -276,6 +287,7 @@ function syncUserChrome() {
   el.currentUserButton.textContent = user ? `${user.name}${user.admin ? " (Admin)" : ""}` : "";
   el.adminTab?.classList.add("hidden");
   el.orgManageButton.classList.toggle("hidden", !user?.admin);
+  el.orgAddButton?.classList.toggle("hidden", !user?.admin);
   if (state.view === "admin") setView("grid");
   el.newWeekButton.disabled = !canChange();
   el.clearWeekButton.disabled = !canDelete();
@@ -533,27 +545,37 @@ function render() {
 }
 
 function renderGrid(week, resources) {
+  const notesHeader = state.notesOpen
+    ? `<th class="notes-header"><button type="button" data-action="toggle-notes-column" title="Hide notes">Notes &lt;</button></th>`
+    : `<th class="notes-header collapsed"><button type="button" data-action="toggle-notes-column" title="Show notes">Notes &gt;</button></th>`;
   el.planningHead.innerHTML = `
     <tr>
       <th>Resource</th>
       ${week.days.map((day) => `<th>${escapeHtml(day.label)}<br><span>${escapeHtml(day.date)}</span></th>`).join("")}
-      <th>Notes</th>
+      ${notesHeader}
     </tr>
   `;
 
-  el.planningBody.innerHTML = resources.map((resource) => `
-    <tr>
-      <td class="person">
-        <strong>${escapeHtml(resource.name)}</strong>
-        <span>${escapeHtml(resource.role)} - ${escapeHtml(resource.jiraName || "-")}</span>
-      </td>
-      ${week.days.map((day) => renderDay(resource, day, resource.assignments[day.key])).join("")}
-      <td class="notes">
-        ${resource.notes ? `<strong>Resource</strong><span>${escapeHtml(resource.notes)}</span>` : ""}
-        ${renderAuditSummary(resource.audit)}
-      </td>
-    </tr>
-  `).join("");
+  el.planningBody.innerHTML = resources.map((resource) => {
+    const hasNote = Boolean(resource.notes);
+    const noteTitle = resource.notes || "";
+    return `
+      <tr>
+        <td class="person">
+          <strong>${escapeHtml(resource.name)}</strong>
+          <span>${escapeHtml(resource.role)} - ${escapeHtml(resource.jiraName || "-")}</span>
+        </td>
+        ${week.days.map((day) => renderDay(resource, day, resource.assignments[day.key])).join("")}
+        ${state.notesOpen ? `
+          <td class="notes">
+            <button class="resource-note-button ${resource.notes ? "has-note" : ""}" type="button" data-action="edit-resource-note" data-resource="${escapeAttr(resource.name)}" title="${escapeAttr(noteTitle)}">
+              ${resource.notes ? `<span>${escapeHtml(resource.notes)}</span>` : `<em>Add note</em>`}
+            </button>
+          </td>
+        ` : `<td class="notes notes-collapsed ${hasNote ? "has-note" : ""}" title="${escapeAttr(noteTitle)}">${hasNote ? `<button class="note-dot" type="button" data-action="edit-resource-note" data-resource="${escapeAttr(resource.name)}">!</button>` : ""}</td>`}
+      </tr>
+    `;
+  }).join("");
 }
 
 function renderAuditSummary(audit) {
@@ -951,7 +973,16 @@ function formatDays(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function onPlanningHeaderClick(event) {
+  if (event.target.dataset.action === "toggle-notes-column") toggleNotesColumn();
+}
+
 function onPlanningClick(event) {
+  const noteButton = event.target.closest("[data-action='edit-resource-note']");
+  if (noteButton) {
+    openResourceNoteForm(noteButton.dataset.resource);
+    return;
+  }
   const pill = event.target.closest(".pill");
   if (!pill) return;
 
@@ -1135,9 +1166,19 @@ function onModalAction(event) {
   if (action === "resource-user") openResourceLinkedUser(event.target.dataset.resource);
   if (action === "resource-edit") openResourceForm("edit", event.target.dataset.resource);
   if (action === "resource-save") saveResource();
+  if (action === "resource-note-save") saveResourceNote();
   if (action === "resource-delete") deleteResource(event.target.dataset.resource);
   if (action === "resource-toggle-active") toggleResourceActive(event.target.dataset.resource);
   if (action === "resource-manager") openResourceManager();
+  if (action === "role-manager") openRoleManager();
+  if (action === "role-edit") editRole(event.target.dataset.role);
+  if (action === "role-cancel-edit") { state.planningContext = { action: "role-manager", editingRole: "" }; openRoleManager(); }
+  if (action === "role-save") saveRole();
+  if (action === "role-delete") deleteRole(event.target.dataset.role);
+  if (action === "org-cancel") { closeModal(); renderOrgChart(); }
+  if (action === "team-add") addTeamMember(event.target.dataset.name);
+  if (action === "team-remove") removeTeamMember(event.target.dataset.name);
+  if (action === "org-delete-confirm") deleteOrgNode();
   if (action === "project-new") openProjectForm("new");
   if (action === "project-edit") openProjectForm("edit", event.target.dataset.project);
   if (action === "project-save") saveProject();
@@ -1155,6 +1196,49 @@ function onModalAction(event) {
   if (action === "open-change-password") openChangePassword();
   if (action === "password-change-save") savePasswordChange();
   if (action === "password-forgot-save") handleForgotPassword();
+  if (action === "toggle-notes-column") toggleNotesColumn();
+}
+
+function toggleNotesColumn() {
+  state.notesOpen = !state.notesOpen;
+  render();
+}
+
+function openResourceNoteForm(resourceName) {
+  if (!requirePermission("change", "You need change authorization to edit notes.")) return;
+  const week = currentWeek();
+  const resource = week.resources.find((item) => item.name === resourceName);
+  if (!resource) return;
+  state.planningContext = { action: "resource-note-form", resourceName };
+  el.modalTitle.textContent = "Edit note";
+  el.modalMeta.textContent = resource.name;
+  el.modalBody.innerHTML = `
+    <form class="plan-form">
+      <label>
+        <span>Note</span>
+        <textarea id="resourceNoteText" rows="5" placeholder="Write a manual note">${escapeHtml(resource.notes || "")}</textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="close-modal">Cancel</button>
+        <button type="button" data-action="resource-note-save">Save</button>
+      </div>
+    </form>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function saveResourceNote() {
+  if (!requirePermission("change", "You need change authorization to save notes.")) return;
+  const context = state.planningContext;
+  if (!context || context.action !== "resource-note-form") return;
+  const week = currentWeek();
+  const resource = week.resources.find((item) => item.name === context.resourceName);
+  if (!resource) return;
+  resource.notes = document.querySelector("#resourceNoteText").value.trim();
+  markWeekDraft(week);
+  saveDrafts();
+  closeModal();
+  render();
 }
 
 function openProjectManager() {
@@ -1347,6 +1431,7 @@ function openResourceManager() {
     <div class="resource-toolbar">
       <input id="resourceSearch" type="search" placeholder="Search consultant">
       ${state.currentUser?.admin ? `<button type="button" data-action="resource-new-user">Create user</button>` : ""}
+      ${state.currentUser?.admin ? `<button type="button" data-action="role-manager">Roles</button>` : ""}
     </div>
     <div id="resourceList" class="resource-list">
       ${week.resources.map((resource) => {
@@ -1358,6 +1443,7 @@ function openResourceManager() {
               <strong>${escapeHtml(resource.name)}</strong>
               <span>${escapeHtml(resource.role || "-")} - ${escapeHtml(resource.jiraName || "-")}</span>
               <span>User: ${linkedUser ? escapeHtml(linkedUser.name) : "Not linked"}</span>
+              <span>Manager: ${resourceManagerName(resource.name) ? escapeHtml(resourceManagerName(resource.name)) : "-"}</span>
               ${resource.inactive ? `<em>Inactive</em>` : ""}
             </div>
             <div class="resource-actions">
@@ -1392,6 +1478,126 @@ function openResourceLinkedUser(resourceName) {
   openUserForm("new", "", "resource-manager", resource.name);
 }
 
+function openRoleManager() {
+  if (!state.currentUser?.admin) {
+    openInfoModal("Admin required", "Only admin users can maintain roles.");
+    return;
+  }
+  const editingRole = state.planningContext?.action === "role-manager" ? state.planningContext.editingRole || "" : "";
+  state.planningContext = { action: "role-manager", editingRole };
+  el.modalTitle.textContent = "Roles";
+  el.modalMeta.textContent = editingRole ? `Editing ${editingRole}` : `${state.data.roles.length} defined`;
+  el.modalBody.innerHTML = `
+    <div class="plan-form">
+      <label>
+        <span>Role name</span>
+        <input id="roleName" list="roleMaintenanceOptions" placeholder="Add role" value="${escapeAttr(editingRole)}">
+        <datalist id="roleMaintenanceOptions">
+          ${DEFAULT_ROLES.map((role) => `<option value="${escapeAttr(role)}"></option>`).join("")}
+        </datalist>
+      </label>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="resource-manager">Back</button>
+        ${editingRole ? `<button class="secondary" type="button" data-action="role-cancel-edit">Cancel edit</button>` : ""}
+        <button type="button" data-action="role-save">${editingRole ? "Save changes" : "Save role"}</button>
+      </div>
+    </div>
+    <div class="resource-list role-list">
+      ${state.data.roles.map((role) => `
+        <div class="resource-row">
+          <div>
+            <strong>${escapeHtml(role)}</strong>
+            <span>${roleUsageLabel(role)}</span>
+          </div>
+          <div class="resource-actions">
+            <button type="button" data-action="role-edit" data-role="${escapeAttr(role)}">Edit</button>
+            <button class="danger" type="button" data-action="role-delete" data-role="${escapeAttr(role)}">Delete</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+`;
+}
+
+function editRole(role) {
+  if (!state.currentUser?.admin) return;
+  state.planningContext = { action: "role-manager", editingRole: role };
+  openRoleManager();
+}
+
+function saveRole() {
+  if (!state.currentUser?.admin) return;
+  const input = document.querySelector("#roleName");
+  const role = input?.value.trim();
+  const editingRole = state.planningContext?.action === "role-manager" ? state.planningContext.editingRole || "" : "";
+  if (!role) {
+    input?.focus();
+    return;
+  }
+  const exists = state.data.roles.some((item) => item.toLowerCase() === role.toLowerCase() && !sameRole(item, editingRole));
+  if (exists) {
+    openInfoModal("Role already exists", "This role is already defined.");
+    return;
+  }
+  if (editingRole) {
+    renameRole(editingRole, role);
+  } else {
+    state.data.roles = normalizeRoleList([...state.data.roles, role]);
+  }
+  saveRoleDefinitions();
+  renderFilterOptions();
+  render();
+  state.planningContext = { action: "role-manager", editingRole: "" };
+  openRoleManager();
+}
+
+function renameRole(oldRole, newRole) {
+  state.data.roles = normalizeRoleList(state.data.roles.map((role) => sameRole(role, oldRole) ? newRole : role));
+  state.data.weeks.forEach((week) => {
+    let changed = false;
+    week.resources.forEach((resource) => {
+      if (!sameRole(resource.role, oldRole)) return;
+      resource.role = newRole;
+      markResourceChanged(resource);
+      changed = true;
+    });
+    if (changed) markWeekDraft(week);
+  });
+  state.users.forEach((user) => {
+    if (sameRole(user.role, oldRole)) user.role = newRole;
+  });
+  saveDrafts();
+  saveUsers();
+}
+
+function deleteRole(role) {
+  if (!state.currentUser?.admin) return;
+  if (isRoleInUse(role)) {
+    openInfoModal("Role is in use", "This role is assigned to a consultant or user. Change those records before deleting it.");
+    return;
+  }
+  state.data.roles = state.data.roles.filter((item) => item !== role);
+  saveRoleDefinitions();
+  renderFilterOptions();
+  render();
+  openRoleManager();
+}
+
+function roleUsageLabel(role) {
+  const resourceCount = resourcesForUserDefinition().filter((resource) => sameRole(resource.role, role)).length;
+  const userCount = state.users.filter((user) => sameRole(user.role, role)).length;
+  return `${resourceCount} consultant${resourceCount === 1 ? "" : "s"} - ${userCount} user${userCount === 1 ? "" : "s"}`;
+}
+
+function isRoleInUse(role) {
+  return resourcesForUserDefinition().some((resource) => sameRole(resource.role, role)) ||
+    state.users.some((user) => sameRole(user.role, role));
+}
+
+function sameRole(left, right) {
+  return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+}
+
 function openResourceForm(mode, resourceName = "") {
   const week = currentWeek();
   const resource = mode === "edit"
@@ -1418,6 +1624,10 @@ function openResourceForm(mode, resourceName = "") {
         <datalist id="resourceRoleOptions">
           ${state.data.roles.map((role) => `<option value="${escapeAttr(role)}"></option>`).join("")}
         </datalist>
+      </label>
+      <label>
+        <span>Manager</span>
+        <input id="resourceManager" value="${escapeAttr(mode === "edit" ? resourceManagerName(resourceName) : "")}" placeholder="No manager" readonly>
       </label>
       <label class="checkbox-field">
         <input id="resourceInactive" type="checkbox" ${resource.inactive ? "checked" : ""}>
@@ -1476,8 +1686,8 @@ function saveResource() {
   }
 
   if (role && !state.data.roles.includes(role)) {
-    state.data.roles.push(role);
-    state.data.roles.sort();
+    state.data.roles = normalizeRoleList([...state.data.roles, role]);
+    saveRoleDefinitions();
   }
 
   markWeekDraft(week);
@@ -1946,6 +2156,7 @@ function normalizeUser(user) {
     id: user.id || makeId("user"),
     resourceName: user.resourceName || "",
     username: user.username || user.email || "",
+    role: user.role || "",
     managerId: user.managerId || "",
     active: user.active !== false,
     permissions: {
@@ -1960,26 +2171,301 @@ function saveUsers() {
   localStorage.setItem(USERS_KEY, JSON.stringify(state.users));
 }
 
-function renderOrgChart() {
-  const activeUsers = state.users.filter((user) => user.active !== false);
-  const roots = activeUsers.filter((user) => !user.managerId || !activeUsers.some((item) => item.id === user.managerId));
-  el.orgChart.innerHTML = roots.length
-    ? roots.map((user) => renderOrgNode(user, activeUsers, 0)).join("")
-    : `<p class="eyebrow">No organization data yet</p>`;
+function loadTeamManagers() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(TEAM_MANAGERS_KEY) || "{}");
+    return stored && typeof stored === "object" ? stored : {};
+  } catch {
+    return {};
+  }
 }
 
-function renderOrgNode(user, users, depth) {
-  const children = users.filter((item) => item.managerId === user.id && item.id !== user.id);
+function saveTeamManagers() {
+  localStorage.setItem(TEAM_MANAGERS_KEY, JSON.stringify(state.teamManagers || {}));
+}
+
+function loadRoleDefinitions(sourceRoles = []) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ROLES_KEY) || "[]");
+    if (Array.isArray(saved) && saved.length) {
+      return normalizeRoleList([...DEFAULT_ROLES, ...(sourceRoles || []), ...saved]);
+    }
+  } catch {
+    // Ignore invalid role data and restore from source defaults.
+  }
+  return normalizeRoleList([...DEFAULT_ROLES, ...(sourceRoles || [])]);
+}
+
+function saveRoleDefinitions() {
+  localStorage.setItem(ROLES_KEY, JSON.stringify(state.data.roles || []));
+}
+
+function normalizeRoleList(roles = []) {
+  return Array.from(new Map(
+    roles
+      .map((role) => String(role || "").trim())
+      .filter(Boolean)
+      .map((role) => [role.toLowerCase(), role])
+  ).values()).sort((a, b) => a.localeCompare(b));
+}
+
+// --- Team / organization tree (consultant based) ---
+
+function teamManagerMap() {
+  if (!state.teamManagers || typeof state.teamManagers !== "object") state.teamManagers = {};
+  return state.teamManagers;
+}
+
+function orgResourceByName(name) {
+  return resourcesForUserDefinition().find((item) => item.name === name) || null;
+}
+
+function orgResourceRole(name) {
+  return orgResourceByName(name)?.role || "";
+}
+
+// Direct reports of a manager name ("" = root level).
+function orgChildrenOf(managerName) {
+  const map = teamManagerMap();
+  const placed = resourcesForUserDefinition().map((item) => item.name);
+  const isPlacedManager = (value) => value !== "" && placed.includes(value);
+  return placed.filter((name) => {
+    if (!Object.prototype.hasOwnProperty.call(map, name)) return false;
+    const parent = map[name];
+    // A member floats to root when its manager was removed / no longer placed.
+    const effectiveParent = isPlacedManager(parent) ? parent : "";
+    return effectiveParent === managerName;
+  });
+}
+
+// Every ancestor (adding an ancestor under a node would create a cycle).
+function orgAncestors(name) {
+  const result = new Set();
+  let current = name;
+  const guard = new Set();
+  while (current) {
+    const parent = orgEffectiveParent(current);
+    if (!parent || guard.has(parent)) break;
+    result.add(parent);
+    guard.add(parent);
+    current = parent;
+  }
+  return result;
+}
+
+function renderOrgChart() {
+  const roots = orgChildrenOf("");
+  const canManage = Boolean(state.currentUser?.admin);
+  if (!roots.length && !canManage) {
+    el.orgChart.innerHTML = `<p class="eyebrow">No team members yet.</p>`;
+    return;
+  }
+  el.orgChart.innerHTML = roots.map((name) => renderOrgNode(name, 0)).join("")
+    + (canManage ? renderOrgAddBox("") : "");
+}
+
+function renderOrgAddBox(managerName) {
+  return `
+    <div class="org-node org-add-node">
+      <button class="org-add-box" type="button" data-action="org-add-child" data-manager="${escapeAttr(managerName)}">+ Add</button>
+    </div>
+  `;
+}
+
+function renderOrgNode(name, depth) {
+  const children = orgChildrenOf(name);
+  const canManage = Boolean(state.currentUser?.admin);
+  const role = orgResourceRole(name);
+  const childNodes = children.map((child) => renderOrgNode(child, depth + 1)).join("");
+  const childrenBlock = (children.length || canManage)
+    ? `<div class="org-children">${childNodes}${canManage ? renderOrgAddBox(name) : ""}</div>`
+    : "";
   return `
     <div class="org-node depth-${Math.min(depth, 4)}">
       <div class="org-card">
-        <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.email || user.username || "-")}</span>
-        <em>${children.length} direct report${children.length === 1 ? "" : "s"}</em>
+        ${canManage ? `<button class="org-remove" type="button" data-action="org-delete-node" data-name="${escapeAttr(name)}" title="Remove" aria-label="Remove">×</button>` : ""}
+        <div class="org-card-body">
+          <strong>${escapeHtml(name)}</strong>
+          <span>${escapeHtml(role || "-")}</span>
+          <em>${children.length} team member${children.length === 1 ? "" : "s"}</em>
+        </div>
       </div>
-      ${children.length ? `<div class="org-children">${children.map((child) => renderOrgNode(child, users, depth + 1)).join("")}</div>` : ""}
+      ${childrenBlock}
     </div>
   `;
+}
+
+function onOrgChartClick(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button || !el.orgChart.contains(button)) return;
+  if (button.dataset.action === "org-add-child") {
+    openTeamMemberPicker(button.dataset.manager || "");
+  }
+  if (button.dataset.action === "org-delete-node") {
+    confirmDeleteOrgNode(button.dataset.name);
+  }
+}
+
+function confirmDeleteOrgNode(name) {
+  if (!requirePermission("change", "You need change authorization to manage the organization.")) return;
+  const children = orgChildrenOf(name);
+  state.planningContext = { action: "org-delete", name };
+  el.modalTitle.textContent = "Remove member";
+  el.modalMeta.textContent = "Remove from organization";
+  el.modalBody.innerHTML = `
+    <div class="modal-summary">
+      <strong>Remove ${escapeHtml(name)} from the organization?</strong>
+      <span>${children.length
+        ? `The manager of its ${children.length} direct report${children.length === 1 ? "" : "s"} will be cleared.`
+        : "This member will be removed from the team."}</span>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" type="button" data-action="org-cancel">Cancel</button>
+      <button class="danger" type="button" data-action="org-delete-confirm">Remove</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function deleteOrgNode() {
+  const context = state.planningContext;
+  if (!context || context.action !== "org-delete") return;
+  if (!requirePermission("change", "You need change authorization to manage the organization.")) return;
+  const name = context.name;
+  const map = teamManagerMap();
+  // Detach direct reports: keep them in the org but blank their manager (become roots).
+  orgChildrenOf(name).forEach((child) => {
+    map[child] = "";
+    applyResourceManager(child, "");
+  });
+  // Remove the node itself.
+  delete map[name];
+  applyResourceManager(name, "");
+  saveTeamManagers();
+  saveUsers();
+  closeModal();
+  renderOrgChart();
+}
+
+// Modal: pick consultants to add under a manager ("" = root level).
+function openTeamMemberPicker(managerName = "") {
+  if (!requirePermission("change", "You need change authorization to manage the organization.")) return;
+  const map = teamManagerMap();
+  const placed = resourcesForUserDefinition().map((item) => item.name);
+  const isPlacedManager = (value) => value !== "" && placed.includes(value);
+  const blocked = managerName ? orgAncestors(managerName) : new Set();
+
+  const candidates = resourcesForUserDefinition().filter((resource) => {
+    const name = resource.name;
+    if (name === managerName) return false;            // cannot manage self
+    if (blocked.has(name)) return false;               // would create a cycle
+    const has = Object.prototype.hasOwnProperty.call(map, name);
+    const parent = has ? (isPlacedManager(map[name]) ? map[name] : "") : null;
+    if (parent === managerName) return true;           // already a member here -> removable
+    if (!has) return true;                             // unplaced -> addable
+    if (parent === "") return true;                    // root (no manager) -> can move under this one
+    return false;                                      // under a different manager -> hidden
+  });
+
+  state.planningContext = { action: "team-picker", managerName };
+  el.modalTitle.textContent = "Takım üyelerini ekle";
+  el.modalMeta.textContent = managerName ? `Yönetici: ${managerName}` : "Üst seviye (yöneticisiz)";
+  el.modalBody.innerHTML = `
+    <div class="resource-toolbar">
+      <input id="resourceSearch" type="search" placeholder="Danışman ara">
+    </div>
+    <div id="resourceList" class="resource-list">
+      ${candidates.map((resource) => {
+        const name = resource.name;
+        const isMember = orgEffectiveParent(name) === managerName
+          && Object.prototype.hasOwnProperty.call(map, name);
+        const searchText = resourceSearchText(resource);
+        return `
+          <div class="resource-row" data-search="${escapeAttr(searchText)}">
+            <div>
+              <strong>${escapeHtml(name)}</strong>
+              <span>${escapeHtml(resource.role || "-")}${resource.jiraName ? ` - ${escapeHtml(resource.jiraName)}` : ""}</span>
+            </div>
+            <div class="resource-actions">
+              ${isMember
+                ? `<button class="danger" type="button" data-action="team-remove" data-name="${escapeAttr(name)}">Kaldır</button>`
+                : `<button type="button" data-action="team-add" data-name="${escapeAttr(name)}">Ekle</button>`}
+            </div>
+          </div>
+        `;
+      }).join("")}
+      <p id="resourceEmpty" class="eyebrow ${candidates.length ? "hidden" : ""}">Eklenebilecek danışman yok</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" data-action="org-cancel">Close</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function orgEffectiveParent(name) {
+  const map = teamManagerMap();
+  if (!Object.prototype.hasOwnProperty.call(map, name)) return null;
+  const placed = resourcesForUserDefinition().map((item) => item.name);
+  const parent = map[name];
+  return parent !== "" && placed.includes(parent) ? parent : "";
+}
+
+function addTeamMember(name) {
+  if (!requirePermission("change", "You need change authorization to manage the organization.")) return;
+  const context = state.planningContext;
+  if (!context || context.action !== "team-picker") return;
+  const managerName = context.managerName || "";
+  teamManagerMap()[name] = managerName;
+  applyResourceManager(name, managerName);
+  saveTeamManagers();
+  saveUsers();
+  renderOrgChart();
+  openTeamMemberPicker(managerName);
+}
+
+function removeTeamMember(name) {
+  if (!requirePermission("change", "You need change authorization to manage the organization.")) return;
+  const context = state.planningContext;
+  if (!context || context.action !== "team-picker") return;
+  const managerName = context.managerName || "";
+  delete teamManagerMap()[name];
+  applyResourceManager(name, "");
+  saveTeamManagers();
+  saveUsers();
+  renderOrgChart();
+  openTeamMemberPicker(managerName);
+}
+
+// Manager name shown in a consultant's resource info (derived from the team map).
+function resourceManagerName(name) {
+  const map = teamManagerMap();
+  if (!Object.prototype.hasOwnProperty.call(map, name)) return "";
+  const parent = map[name];
+  const placed = resourcesForUserDefinition().map((item) => item.name);
+  return parent !== "" && placed.includes(parent) ? parent : "";
+}
+
+// Apply a manager change to a consultant: update every week's resource entry and
+// keep the linked user's managerId in sync (so resource info + mail CC reflect it).
+function applyResourceManager(resourceName, managerResourceName) {
+  const manager = managerResourceName || "";
+  state.data.weeks.forEach((week) => {
+    week.resources.forEach((resource) => {
+      if (resource.name === resourceName) resource.manager = manager;
+    });
+  });
+  const resource = orgResourceByName(resourceName);
+  const memberUser = resource ? userForResource(resource) : null;
+  if (memberUser) {
+    if (!manager) {
+      memberUser.managerId = "";
+    } else {
+      const managerResource = orgResourceByName(manager);
+      const managerUser = managerResource ? userForResource(managerResource) : null;
+      memberUser.managerId = managerUser ? managerUser.id : "";
+    }
+  }
 }
 
 function managerLabel(user) {
@@ -2091,6 +2577,7 @@ function defaultUserForResource(resource) {
     username: uniqueUsername(resource.jiraName || resource.name),
     email: String(resource.jiraName || "").includes("@") ? resource.jiraName : "",
     resourceName: resource.name,
+    role: resource.role || "",
     managerId: "",
     password: "welcome123",
     admin: false,
@@ -2112,7 +2599,7 @@ function uniqueUsername(value) {
   return candidate;
 }
 
-function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedResource = "") {
+function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedResource = "", preselectedManagerId = "") {
   if (!state.currentUser?.admin) return;
   const preselectedResourceItem = preselectedResource
     ? resourcesForUserDefinition().find((item) => item.name === preselectedResource)
@@ -2124,7 +2611,20 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
       : { name: "", username: "", email: "", resourceName: "", managerId: "", password: "welcome123", admin: false, active: true, permissions: { read: true, change: false, delete: false } };
   if (!user) return;
   if (mode === "new" && preselectedResource) user.resourceName = preselectedResource;
-  const cancelAction = returnTo === "resource-manager" ? "resource-manager" : "admin-panel";
+  if (mode === "new" && preselectedManagerId) user.managerId = preselectedManagerId;
+
+  // Feed the Manager field from the organization team assignment.
+  const formResourceName = user.resourceName || (mode === "edit" ? user.name : preselectedResource) || "";
+  const orgManagerName = formResourceName ? resourceManagerName(formResourceName) : "";
+  const orgManagerResource = orgManagerName ? orgResourceByName(orgManagerName) : null;
+  const orgManagerUser = orgManagerResource
+    ? userForResource(orgManagerResource)
+    : (orgManagerName ? state.users.find((item) => item.name === orgManagerName) : null);
+  const selectedManagerId = user.managerId || (orgManagerUser ? orgManagerUser.id : "");
+  const orgManagerNoUser = Boolean(orgManagerName) && !orgManagerUser;
+  const userRoleValue = user.role || preselectedResourceItem?.role || "";
+
+  const cancelAction = returnTo === "resource-manager" ? "resource-manager" : returnTo === "org" ? "org-cancel" : "admin-panel";
   state.planningContext = { action: "user-form", mode, userId, returnTo, resourceName: preselectedResource };
   el.modalTitle.textContent = mode === "edit" ? "Edit user" : "New user";
   el.modalMeta.textContent = "Resource user definition";
@@ -2143,12 +2643,19 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
         <input id="userEmail" type="email" value="${escapeAttr(user.email || "")}" placeholder="mail@company.com">
       </label>
       <label>
+        <span>Role</span>
+        <input id="userRole" value="${escapeAttr(userRoleValue)}" list="userRoleOptions" placeholder="Role">
+        <datalist id="userRoleOptions">
+          ${state.data.roles.map((role) => `<option value="${escapeAttr(role)}"></option>`).join("")}
+        </datalist>
+      </label>
+      <label>
         <span>Manager</span>
         <select id="userManager">
-          <option value="">No manager</option>
+          <option value="" ${!selectedManagerId ? "selected" : ""}>${orgManagerNoUser ? `${escapeHtml(orgManagerName)} (takım yöneticisi)` : "No manager"}</option>
           ${state.users
             .filter((item) => item.id !== user.id)
-            .map((item) => `<option value="${escapeAttr(item.id)}" ${item.id === user.managerId ? "selected" : ""}>${escapeHtml(item.name)}</option>`)
+            .map((item) => `<option value="${escapeAttr(item.id)}" ${item.id === selectedManagerId ? "selected" : ""}>${escapeHtml(item.name)}</option>`)
             .join("")}
         </select>
       </label>
@@ -2172,6 +2679,7 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
       </div>
     </form>
   `;
+  el.projectModal.classList.remove("hidden");
 }
 
 function permissionCheckbox(id, label, checked) {
@@ -2191,6 +2699,24 @@ function resourcesForUserDefinition() {
     });
   });
   return Array.from(resources.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function syncResourceRole(resourceName, role) {
+  if (!resourceName || !role) return;
+  let changed = false;
+  state.data.weeks.forEach((week) => {
+    week.resources.forEach((resource) => {
+      if (resource.name !== resourceName || resource.role === role) return;
+      resource.role = role;
+      markResourceChanged(resource);
+      markWeekDraft(week);
+      changed = true;
+    });
+  });
+  if (changed) {
+    saveDrafts();
+    renderFilterOptions();
+  }
 }
 
 function generatePasswordForUserForm() {
@@ -2225,6 +2751,7 @@ function saveUser() {
   const name = document.querySelector("#userName").value.trim();
   const username = document.querySelector("#userUsername").value.trim();
   const email = document.querySelector("#userEmail").value.trim();
+  const role = document.querySelector("#userRole").value.trim();
   if (!name || !username) {
     openInfoModal("Missing user info", "Name and user name are required.");
     return;
@@ -2248,12 +2775,18 @@ function saveUser() {
     username,
     email,
     resourceName: context.mode === "new" ? context.resourceName || "" : state.users.find((item) => item.id === context.userId)?.resourceName || "",
+    role,
     managerId: document.querySelector("#userManager").value,
     admin: document.querySelector("#userAdmin").checked,
     active: document.querySelector("#userActive").checked,
     permissions
   };
   if (payload.admin) payload.permissions = { read: true, change: true, delete: true };
+  if (role && !state.data.roles.some((item) => item.toLowerCase() === role.toLowerCase())) {
+    state.data.roles = normalizeRoleList([...state.data.roles, role]);
+    saveRoleDefinitions();
+  }
+  syncResourceRole(payload.resourceName || context.resourceName || name, role);
   if (context.mode === "new") {
     state.users.push({ ...payload, id: makeId("user"), password: document.querySelector("#userPassword").value || "welcome123" });
   } else {
@@ -2267,6 +2800,9 @@ function saveUser() {
   syncUserChrome();
   if (context.returnTo === "resource-manager") {
     openResourceManager();
+  } else if (context.returnTo === "org") {
+    closeModal();
+    renderOrgChart();
   } else {
     openAdminPanel();
   }

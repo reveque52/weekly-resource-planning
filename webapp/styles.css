@@ -311,6 +311,11 @@ textarea {
   cursor: pointer;
 }
 
+.view-tabs button .tab-icon {
+  display: block;
+  vertical-align: -2px;
+}
+
 .view-tabs button.active {
   background: var(--accent);
   color: var(--accent-ink);
@@ -366,6 +371,56 @@ textarea {
 .planning-table th:first-child {
   z-index: 3;
   background: #f7f9fb;
+}
+
+.notes-header {
+  min-width: 150px;
+}
+
+.notes-header.collapsed,
+.notes-collapsed {
+  width: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  padding: 4px;
+}
+
+.notes-collapsed.has-note {
+  background: rgba(111, 66, 193, 0.1);
+  box-shadow: inset 3px 0 0 #6f42c1;
+  text-align: center;
+}
+
+.note-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: #6f42c1;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.notes-header button {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #344052;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-weight: 700;
+}
+
+.notes-header.collapsed button {
+  writing-mode: vertical-rl;
+  min-height: 72px;
+  padding: 6px 4px;
 }
 
 .person {
@@ -505,6 +560,31 @@ textarea {
   max-width: 220px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.resource-note-button {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  border: 1px dashed #9eb2c5;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.resource-note-button.has-note {
+  border-style: solid;
+  border-color: rgba(111, 66, 193, 0.42);
+  background: rgba(111, 66, 193, 0.07);
+  color: var(--ink);
+}
+
+.resource-note-button:hover {
+  border-color: #6f42c1;
+  background: rgba(111, 66, 193, 0.12);
 }
 
 .notes strong,
@@ -803,23 +883,103 @@ textarea {
 }
 
 .org-chart {
-  display: grid;
-  gap: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 24px;
+  overflow-x: auto;
+  padding: 10px 6px 18px;
 }
 
+/* Node = vertical column: card on top, children row beneath (top-down tree) */
 .org-node {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .org-card {
-  width: min(320px, 100%);
+  position: relative;
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
+  border-top: 3px solid var(--accent);
+  border-radius: 6px;
   background: #fff;
-  padding: 12px;
-  box-shadow: 0 8px 22px rgba(23, 32, 42, 0.06);
+  padding: 7px 8px;
+  box-shadow: 0 4px 12px rgba(23, 32, 42, 0.06);
+}
+
+.org-card-body {
+  min-width: 0;
+}
+
+.org-card strong {
+  font-size: 12px;
+}
+
+.org-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: #c0392b;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(23, 32, 42, 0.12);
+}
+
+.org-remove:hover {
+  background: #c0392b;
+  color: #fff;
+  border-color: #c0392b;
+}
+
+.org-add-node {
+  min-width: 156px;
+}
+
+.org-add-box {
+  width: 132px;
+  min-height: 72px;
+  border: 2px dashed rgba(80, 104, 128, 0.58);
+  border-radius: 6px;
+  background: rgba(248, 250, 252, 0.42);
+  color: #5b6b7a;
+  cursor: pointer;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.org-add-box:hover,
+.org-add-box:focus-visible {
+  border-color: #e0a019;
+  background: rgba(255, 244, 214, 0.58);
+  color: #744b00;
+  box-shadow: inset 0 0 0 2px #e0a019, 0 8px 22px rgba(224, 160, 25, 0.24);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.org-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .org-card strong,
@@ -831,20 +991,78 @@ textarea {
 .org-card span,
 .org-card em {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 10px;
 }
 
+/* Children laid out horizontally beneath the parent, with connector lines */
 .org-children {
-  display: grid;
-  gap: 10px;
-  margin-left: 28px;
-  padding-left: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  position: relative;
+  padding-top: 22px;
+}
+
+/* vertical drop from parent card down to the sibling bus */
+.org-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 22px;
   border-left: 2px solid var(--line);
 }
 
-.depth-1 .org-card { border-left-color: var(--green); }
-.depth-2 .org-card { border-left-color: var(--amber); }
-.depth-3 .org-card { border-left-color: #6f42c1; }
+.org-children > .org-node {
+  position: relative;
+  padding: 22px 12px 0;
+}
+
+/* horizontal bus + vertical stub up into each child */
+.org-children > .org-node::before,
+.org-children > .org-node::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 22px;
+}
+
+.org-children > .org-node::before {
+  right: 50%;
+  border-top: 2px solid var(--line);
+  border-right: 2px solid var(--line);
+}
+
+.org-children > .org-node::after {
+  left: 50%;
+  border-top: 2px solid var(--line);
+  border-left: 2px solid var(--line);
+}
+
+/* trim outer halves of the bus at the ends */
+.org-children > .org-node:first-child::before {
+  border: 0;
+}
+
+.org-children > .org-node:last-child::after {
+  border: 0;
+}
+
+/* single child: just a straight vertical line, no horizontal bus */
+.org-children > .org-node:only-child::before {
+  display: none;
+}
+
+.org-children > .org-node:only-child::after {
+  left: 50%;
+  border-top: 0;
+  border-left: 2px solid var(--line);
+}
+
+.depth-1 .org-card { border-top-color: var(--green); }
+.depth-2 .org-card { border-top-color: var(--amber); }
+.depth-3 .org-card { border-top-color: #6f42c1; }
 
 .bars {
   display: grid;

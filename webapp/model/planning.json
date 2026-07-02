@@ -116959,12 +116959,17 @@
     "z"
   ],
   "roles": [
+    "ABAP",
     "Abap",
     "Arct.",
+    "CEO",
     "Fiori",
     "Func",
+    "Functional",
     "Java",
     "PI/PO",
-    "PM"
+    "PM",
+    "Project Manager",
+    "Team Lead"
   ]
 }
