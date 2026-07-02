@@ -6,6 +6,7 @@ const SESSION_KEY = "weeklyResourcePlanningSession";
 const MAIL_QUEUE_KEY = "weeklyResourcePlanningMailQueue";
 const TEAM_MANAGERS_KEY = "weeklyResourcePlanningTeamManagers";
 const ROLES_KEY = "weeklyResourcePlanningRoles";
+const SEARCH_VARIANTS_KEY = "weeklyResourcePlanningSearchVariants";
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const DEFAULT_ROLES = ["ABAP", "Functional", "Team Lead", "Project Manager", "CEO"];
 const DEFAULT_USERS = [
@@ -51,6 +52,10 @@ const el = {
   newWeekButton: document.querySelector("#newWeekButton"),
   clearWeekButton: document.querySelector("#clearWeekButton"),
   searchInput: document.querySelector("#searchInput"),
+  searchVariantSelect: document.querySelector("#searchVariantSelect"),
+  saveSearchVariantButton: document.querySelector("#saveSearchVariantButton"),
+  deleteSearchVariantButton: document.querySelector("#deleteSearchVariantButton"),
+  clearSearchVariantButton: document.querySelector("#clearSearchVariantButton"),
   roleSelect: document.querySelector("#roleSelect"),
   projectSelect: document.querySelector("#projectSelect"),
   resourceCount: document.querySelector("#resourceCount"),
@@ -144,16 +149,23 @@ function hydrateFilters() {
   el.clearWeekButton.addEventListener("click", clearCurrentWeek);
   el.searchInput.addEventListener("input", (event) => {
     state.search = normalizeSearchTerm(event.target.value);
+    syncSearchVariantSelection();
     render();
   });
   el.roleSelect.addEventListener("change", (event) => {
     state.role = event.target.value;
+    syncSearchVariantSelection();
     render();
   });
   el.projectSelect.addEventListener("change", (event) => {
     state.project = event.target.value;
+    syncSearchVariantSelection();
     render();
   });
+  el.searchVariantSelect.addEventListener("change", applySearchVariant);
+  el.saveSearchVariantButton.addEventListener("click", saveCurrentSearchVariant);
+  el.deleteSearchVariantButton.addEventListener("click", deleteCurrentSearchVariant);
+  el.clearSearchVariantButton.addEventListener("click", clearSearchFilters);
   el.resourceMetric.addEventListener("click", openResourceManager);
   el.projectMetric.addEventListener("click", openProjectManager);
   el.gridTab.addEventListener("click", () => setView("grid"));
@@ -237,8 +249,10 @@ function renderFilterOptions() {
   el.roleSelect.innerHTML = optionList(["All", ...state.data.roles]);
   el.projectSelect.innerHTML = optionList(["All", ...activeProjects()]);
   el.weekSelect.value = state.weekId;
+  el.searchInput.value = state.search;
   el.roleSelect.value = state.role;
   el.projectSelect.value = state.project;
+  renderSearchVariants();
   const people = uniquePeople();
   if (!state.personSummaryName && people.length) state.personSummaryName = people[0];
   el.personSummarySelect.innerHTML = people
@@ -252,6 +266,111 @@ function renderFilterOptions() {
 
 function optionList(values) {
   return values.map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("");
+}
+
+function currentSearchVariantUserKey() {
+  return state.currentUser?.id || "anonymous";
+}
+
+function loadSearchVariants() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SEARCH_VARIANTS_KEY) || "{}");
+    return stored && typeof stored === "object" ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSearchVariants(allVariants) {
+  localStorage.setItem(SEARCH_VARIANTS_KEY, JSON.stringify(allVariants));
+}
+
+function userSearchVariants() {
+  const allVariants = loadSearchVariants();
+  const variants = allVariants[currentSearchVariantUserKey()];
+  return Array.isArray(variants) ? variants : [];
+}
+
+function renderSearchVariants() {
+  if (!el.searchVariantSelect) return;
+  const variants = userSearchVariants();
+  el.searchVariantSelect.innerHTML = `<option value="">Unsaved search</option>` + variants
+    .map((variant) => `<option value="${escapeAttr(variant.name)}">${escapeHtml(variant.name)}</option>`)
+    .join("");
+  syncSearchVariantSelection();
+}
+
+function syncSearchVariantSelection() {
+  if (!el.searchVariantSelect) return;
+  const matched = userSearchVariants().find((variant) =>
+    normalizeSearchTerm(variant.search || "") === state.search &&
+    (variant.role || "All") === state.role &&
+    (variant.project || "All") === state.project
+  );
+  el.searchVariantSelect.value = matched?.name || "";
+}
+
+function applySearchVariant() {
+  const name = el.searchVariantSelect.value;
+  const variant = userSearchVariants().find((item) => item.name === name);
+  if (!variant) return;
+  state.search = normalizeSearchTerm(variant.search || "");
+  state.role = variant.role || "All";
+  state.project = activeProjects().includes(variant.project) ? variant.project : "All";
+  renderFilterOptions();
+  render();
+}
+
+function saveCurrentSearchVariant() {
+  const proposed = el.searchVariantSelect.value || searchVariantDefaultName();
+  const name = prompt("Search variant name", proposed);
+  if (!name?.trim()) return;
+  const cleanName = name.trim();
+  const allVariants = loadSearchVariants();
+  const userKey = currentSearchVariantUserKey();
+  const variants = Array.isArray(allVariants[userKey]) ? allVariants[userKey] : [];
+  const nextVariant = {
+    name: cleanName,
+    search: state.search,
+    role: state.role,
+    project: state.project
+  };
+  const index = variants.findIndex((variant) => variant.name.toLowerCase() === cleanName.toLowerCase());
+  if (index >= 0) {
+    variants[index] = nextVariant;
+  } else {
+    variants.push(nextVariant);
+  }
+  allVariants[userKey] = variants.sort((a, b) => a.name.localeCompare(b.name));
+  saveSearchVariants(allVariants);
+  renderSearchVariants();
+}
+
+function deleteCurrentSearchVariant() {
+  const name = el.searchVariantSelect.value;
+  if (!name) return;
+  const allVariants = loadSearchVariants();
+  const userKey = currentSearchVariantUserKey();
+  allVariants[userKey] = (allVariants[userKey] || []).filter((variant) => variant.name !== name);
+  saveSearchVariants(allVariants);
+  el.searchVariantSelect.value = "";
+  renderSearchVariants();
+}
+
+function clearSearchFilters() {
+  state.search = "";
+  state.role = "All";
+  state.project = "All";
+  renderFilterOptions();
+  render();
+}
+
+function searchVariantDefaultName() {
+  const parts = [];
+  if (state.search) parts.push(el.searchInput.value.trim());
+  if (state.role !== "All") parts.push(state.role);
+  if (state.project !== "All") parts.push(state.project);
+  return parts.filter(Boolean).join(" / ") || "My search";
 }
 
 function hydrateAuth() {
@@ -1173,6 +1292,8 @@ function onModalAction(event) {
   if (action === "resource-delete") deleteResource(event.target.dataset.resource);
   if (action === "resource-toggle-active") toggleResourceActive(event.target.dataset.resource);
   if (action === "resource-manager") openResourceManager();
+  if (action === "users-export") exportUsersToExcel();
+  if (action === "users-import") openImportFile("users");
   if (action === "role-manager") openRoleManager();
   if (action === "role-edit") editRole(event.target.dataset.role);
   if (action === "role-cancel-edit") { state.planningContext = { action: "role-manager", editingRole: "" }; openRoleManager(); }
@@ -1188,6 +1309,8 @@ function onModalAction(event) {
   if (action === "project-delete") deleteProject(event.target.dataset.project);
   if (action === "project-toggle-active") toggleProjectActive(event.target.dataset.project);
   if (action === "project-manager") openProjectManager();
+  if (action === "projects-export") exportProjectsToExcel();
+  if (action === "projects-import") openImportFile("projects");
   if (action === "admin-edit-user") openAuthorizationForm(event.target.dataset.userId);
   if (action === "admin-save-user") saveUser();
   if (action === "admin-save-authorization") saveAuthorization();
@@ -1244,6 +1367,327 @@ function saveResourceNote() {
   render();
 }
 
+const USER_IMPORT_HEADERS = ["Name", "User Name", "Email", "Role", "Resource Name", "Manager", "Admin", "Active", "Resource", "Read", "Change", "Delete", "Password"];
+const PROJECT_IMPORT_HEADERS = ["Project", "Project Manager", "Budget Days", "Inactive"];
+
+function excelActionGroup(exportAction, importAction) {
+  return `
+    <div class="excel-action-group">
+      ${excelActionButton(exportAction, "Export Excel", "Excel'e aktar", "up")}
+      ${excelActionButton(importAction, "Import Excel", "Excel'den içe al", "down")}
+    </div>
+  `;
+}
+
+function excelActionButton(action, label, title, direction) {
+  return `
+    <button class="secondary excel-action" type="button" data-action="${action}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">
+      ${excelIcon(direction)}
+      <span>${label}</span>
+    </button>
+  `;
+}
+
+function excelIcon(direction) {
+  const arrow = direction === "up"
+    ? `<path d="M12 16V8m0 0-3 3m3-3 3 3" />`
+    : `<path d="M12 8v8m0 0-3-3m3 3 3-3" />`;
+  return `
+    <svg class="excel-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+      <path d="M6 3h8l4 4v14H6z" />
+      <path d="M14 3v5h5" />
+      <path d="M8.5 11.5 11 15m0-3.5L8.5 15" />
+      ${arrow}
+    </svg>
+  `;
+}
+
+function exportUsersToExcel() {
+  if (!state.currentUser?.admin) return;
+  const managerById = new Map(state.users.map((user) => [user.id, user.name]));
+  const rows = state.users.map((user) => ({
+    "Name": user.name || "",
+    "User Name": user.username || "",
+    "Email": user.email || "",
+    "Role": user.role || "",
+    "Resource Name": user.resourceName || "",
+    "Manager": managerById.get(user.managerId) || "",
+    "Admin": yesNo(user.admin),
+    "Active": yesNo(user.active !== false),
+    "Resource": yesNo(user.isResource),
+    "Read": yesNo(user.permissions?.read),
+    "Change": yesNo(user.permissions?.change),
+    "Delete": yesNo(user.permissions?.delete),
+    "Password": user.password || ""
+  }));
+  downloadExcelTable("weekly-planning-users.xls", "Users", USER_IMPORT_HEADERS, rows);
+}
+
+function exportProjectsToExcel() {
+  if (!requirePermission("change", "You need change authorization to manage projects.")) return;
+  const rows = state.data.projects
+    .filter((project) => !projectDefinition(project).deleted)
+    .map((project) => {
+      const definition = projectDefinition(project);
+      return {
+        "Project": project,
+        "Project Manager": definition.manager || "",
+        "Budget Days": definition.budgetDays || "",
+        "Inactive": yesNo(definition.inactive)
+      };
+    });
+  downloadExcelTable("weekly-planning-projects.xls", "Projects", PROJECT_IMPORT_HEADERS, rows);
+}
+
+function openImportFile(type) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".xls,.xml,.csv,.tsv,.txt,.html";
+  input.className = "hidden";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) importExcelFile(type, file);
+    input.remove();
+  }, { once: true });
+  document.body.appendChild(input);
+  input.click();
+}
+
+function importExcelFile(type, file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rows = parseImportRows(String(reader.result || ""));
+      const result = type === "users" ? importUsers(rows) : importProjects(rows);
+      openInfoModal("Import completed", `${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`);
+    } catch (error) {
+      openInfoModal("Import failed", error.message || "The selected file could not be imported.");
+    }
+  };
+  reader.onerror = () => openInfoModal("Import failed", "The selected file could not be read.");
+  reader.readAsText(file, "utf-8");
+}
+
+function importUsers(rows) {
+  if (!state.currentUser?.admin) return { created: 0, updated: 0, skipped: 0 };
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  const pendingManagers = [];
+  const userByName = () => new Map(state.users.map((user) => [normalizeKey(user.name), user]));
+  const userByIdentity = () => new Map(state.users.flatMap((user) => [
+    [normalizeKey(user.username), user],
+    [normalizeKey(user.email), user]
+  ].filter(([key]) => key)));
+
+  rows.forEach((row) => {
+    const name = cellValue(row, "Name").trim();
+    const username = cellValue(row, "User Name", "Username").trim();
+    if (!name || !username) {
+      skipped += 1;
+      return;
+    }
+    const email = cellValue(row, "Email").trim();
+    const role = cellValue(row, "Role").trim();
+    const managerName = cellValue(row, "Manager").trim();
+    const match = userByIdentity().get(normalizeKey(username))
+      || (email ? userByIdentity().get(normalizeKey(email)) : null)
+      || userByName().get(normalizeKey(name));
+    const payload = normalizeUser({
+      ...(match || {}),
+      name,
+      username,
+      email,
+      role,
+      resourceName: cellValue(row, "Resource Name", "Resource").trim(),
+      managerId: "",
+      admin: parseBoolean(cellValue(row, "Admin"), match?.admin || false),
+      active: parseBoolean(cellValue(row, "Active"), match?.active !== false),
+      isResource: parseBoolean(cellValue(row, "Resource"), match?.isResource || false),
+      password: cellValue(row, "Password").trim() || match?.password || "welcome123",
+      permissions: {
+        read: parseBoolean(cellValue(row, "Read"), match?.permissions?.read || false),
+        change: parseBoolean(cellValue(row, "Change"), match?.permissions?.change || false),
+        delete: parseBoolean(cellValue(row, "Delete"), match?.permissions?.delete || false)
+      }
+    });
+    if (payload.admin) payload.permissions = { read: true, change: true, delete: true };
+    if (match) {
+      Object.assign(match, payload, { id: match.id });
+      pendingManagers.push({ user: match, managerName });
+      updated += 1;
+    } else {
+      const user = { ...payload, id: makeId("user") };
+      state.users.push(user);
+      pendingManagers.push({ user, managerName });
+      created += 1;
+    }
+    if (role && !state.data.roles.some((item) => sameRole(item, role))) {
+      state.data.roles = normalizeRoleList([...state.data.roles, role]);
+    }
+  });
+
+  const managers = userByName();
+  pendingManagers.forEach(({ user, managerName }) => {
+    user.managerId = managerName ? managers.get(normalizeKey(managerName))?.id || "" : "";
+  });
+
+  saveUsers();
+  saveRoleDefinitions();
+  syncResourceUsers();
+  syncUserChrome();
+  renderFilterOptions();
+  render();
+  openResourceManager();
+  return { created, updated, skipped };
+}
+
+function importProjects(rows) {
+  if (!requirePermission("change", "You need change authorization to manage projects.")) return { created: 0, updated: 0, skipped: 0 };
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  rows.forEach((row) => {
+    const name = cellValue(row, "Project", "Project Name").trim();
+    if (!name) {
+      skipped += 1;
+      return;
+    }
+    const exists = state.data.projects.some((project) => project === name);
+    if (!exists) {
+      state.data.projects.push(name);
+      created += 1;
+    } else {
+      updated += 1;
+    }
+    state.data.projectMeta[name] = {
+      ...projectDefinition(name),
+      manager: cellValue(row, "Project Manager", "Manager").trim(),
+      budgetDays: cellValue(row, "Budget Days", "Budget").trim(),
+      inactive: parseBoolean(cellValue(row, "Inactive"), false),
+      deleted: false
+    };
+  });
+  state.data.projects = Array.from(new Set(state.data.projects)).sort();
+  saveProjectDefinitions();
+  renderFilterOptions();
+  render();
+  openProjectManager();
+  return { created, updated, skipped };
+}
+
+function downloadExcelTable(filename, sheetName, headers, rows) {
+  const table = `
+    <table>
+      <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${rows.map((row) => `<tr>${headers.map((header) => `<td>${escapeHtml(row[header] ?? "")}</td>`).join("")}</tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+  const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><h1>${escapeHtml(sheetName)}</h1>${table}</body></html>`;
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseImportRows(content) {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("<")) return parseHtmlOrXmlRows(trimmed);
+  const delimiter = trimmed.includes("\t") ? "\t" : ",";
+  return tableRowsToObjects(parseDelimitedRows(trimmed, delimiter));
+}
+
+function parseHtmlOrXmlRows(content) {
+  const doc = new DOMParser().parseFromString(content, "text/html");
+  const rows = Array.from(doc.querySelectorAll("tr")).map((row) =>
+    Array.from(row.children).map((cell) => cell.textContent.trim())
+  );
+  if (rows.length) return tableRowsToObjects(rows);
+  const xml = new DOMParser().parseFromString(content, "application/xml");
+  const xmlRows = Array.from(xml.getElementsByTagName("Row")).map((row) =>
+    Array.from(row.getElementsByTagName("Data")).map((cell) => cell.textContent.trim())
+  );
+  return tableRowsToObjects(xmlRows);
+}
+
+function parseDelimitedRows(content, delimiter) {
+  const rows = [];
+  let row = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      value += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      row.push(value.trim());
+      value = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(value.trim());
+      rows.push(row);
+      row = [];
+      value = "";
+    } else {
+      value += char;
+    }
+  }
+  row.push(value.trim());
+  rows.push(row);
+  return rows.filter((item) => item.some(Boolean));
+}
+
+function tableRowsToObjects(rows) {
+  const cleanRows = rows.filter((row) => row.some(Boolean));
+  if (cleanRows.length < 2) return [];
+  const headers = cleanRows[0].map(normalizeHeader);
+  return cleanRows.slice(1).map((row) => {
+    const item = {};
+    headers.forEach((header, index) => {
+      if (header) item[header] = row[index] || "";
+    });
+    return item;
+  });
+}
+
+function cellValue(row, ...headers) {
+  for (const header of headers) {
+    const value = row[normalizeHeader(header)];
+    if (value !== undefined) return String(value);
+  }
+  return "";
+}
+
+function normalizeHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseBoolean(value, fallback = false) {
+  const normalized = normalizeKey(value);
+  if (!normalized) return Boolean(fallback);
+  return ["yes", "true", "1", "x", "active", "evet", "var"].includes(normalized);
+}
+
+function yesNo(value) {
+  return value ? "Yes" : "No";
+}
+
 function openProjectManager() {
   if (!requirePermission("change", "You need change authorization to manage projects.")) return;
   state.planningContext = { action: "project-manager" };
@@ -1253,6 +1697,7 @@ function openProjectManager() {
   el.modalBody.innerHTML = `
     <div class="resource-toolbar">
       <button type="button" data-action="project-new">New project</button>
+      ${excelActionGroup("projects-export", "projects-import")}
     </div>
     <div class="resource-list">
       ${projects.map((project) => {
@@ -1433,8 +1878,13 @@ function openResourceManager() {
   el.modalBody.innerHTML = `
     <div class="resource-toolbar">
       <input id="resourceSearch" type="search" placeholder="Search consultant">
-      ${state.currentUser?.admin ? `<button type="button" data-action="resource-new-user">Create user</button>` : ""}
-      ${state.currentUser?.admin ? `<button type="button" data-action="role-manager">Roles</button>` : ""}
+      ${state.currentUser?.admin ? `
+        <div class="resource-toolbar-actions">
+          <button type="button" data-action="resource-new-user">Create user</button>
+          <button type="button" data-action="role-manager">Roles</button>
+          ${excelActionGroup("users-export", "users-import")}
+        </div>
+      ` : ""}
     </div>
     <div id="resourceList" class="resource-list">
       ${week.resources.map((resource) => {
@@ -2489,6 +2939,7 @@ function openAdminPanel() {
   el.modalBody.innerHTML = `
     <div class="resource-toolbar">
       <button class="secondary" type="button" data-action="mail-drafts">Mail drafts (${state.mailQueue.length})</button>
+      ${excelActionGroup("users-export", "users-import")}
     </div>
     <div class="resource-list user-list">
       ${state.users.map((user) => `
@@ -2676,7 +3127,6 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
         ${permissionCheckbox("userChange", "Change", user.permissions?.change)}
         ${permissionCheckbox("userDelete", "Delete", user.permissions?.delete)}
         ${permissionCheckbox("userAdmin", "Admin", user.admin)}
-        ${permissionCheckbox("userActive", "Active", user.active !== false)}
         ${permissionCheckbox("userIsResource", "Resource", user.isResource)}
       </div>
       <div class="modal-actions">
@@ -2844,7 +3294,9 @@ function saveUser() {
     role,
     managerId: document.querySelector("#userManager").value,
     admin: document.querySelector("#userAdmin").checked,
-    active: document.querySelector("#userActive").checked,
+    active: context.mode === "new"
+      ? true
+      : state.users.find((item) => item.id === context.userId)?.active !== false,
     isResource: document.querySelector("#userIsResource").checked,
     permissions
   };
