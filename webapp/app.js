@@ -2855,7 +2855,7 @@ function loadUsers() {
 }
 
 function normalizeUser(user) {
-  const isAdminUser = user.id === "admin" || user.username === "admin" || user.admin === true;
+  const isAdminUser = user.id === "admin" || user.username === "admin";
   const normalized = {
     ...user,
     id: user.id || makeId("user"),
@@ -3425,11 +3425,19 @@ function syncResourceUsers() {
     // 1) Ensure a row exists for each resource user and keep it in sync.
     resourceUsers.forEach((user) => {
       let row = week.resources.find((resource) => resource.fromUser === user.id);
+      if (!row && user.resourceName) {
+        row = week.resources.find((resource) => !resource.fromUser && resource.name === user.resourceName);
+        if (row) row.fromUser = user.id;
+      }
+      if (!row) {
+        row = week.resources.find((resource) => !resource.fromUser && resource.name === user.name);
+        if (row) row.fromUser = user.id;
+      }
       if (!row) {
         // Do not duplicate an existing (planning-data) resource with the same name.
         if (week.resources.some((resource) => !resource.fromUser && resource.name === user.name)) return;
         week.resources.push({
-          name: user.name,
+          name: user.resourceName || user.name,
           jiraName: user.email || "",
           role: user.role || "",
           inactive: !user.active,
@@ -3442,13 +3450,14 @@ function syncResourceUsers() {
       }
       const desiredInactive = !user.active;
       const desiredJiraName = user.email || "";
+      const desiredName = user.resourceName || user.name;
       if (
-        row.name !== user.name ||
+        row.name !== desiredName ||
         row.jiraName !== desiredJiraName ||
         row.role !== (user.role || "") ||
         row.inactive !== desiredInactive
       ) {
-        row.name = user.name;
+        row.name = desiredName;
         row.jiraName = desiredJiraName;
         row.role = user.role || "";
         row.inactive = desiredInactive;
