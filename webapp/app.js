@@ -13,11 +13,14 @@ const DEFAULT_USERS = [
   {
     id: "admin",
     name: "Planning Admin",
-    email: "admin@company.local",
+    email: "selcuk.dere@fit-global.com",
     username: "admin",
     password: "admin123",
     admin: true,
-    isResource: false,
+    isResource: true,
+    role: "Project Manager",
+    resourceName: "Planning Admin",
+    active: true,
     permissions: { read: true, change: true, delete: true }
   }
 ];
@@ -128,6 +131,7 @@ fetch("model/planning.json")
     state.data = normalizeData(mergeSavedDrafts(data));
     state.data.roles = loadRoleDefinitions(state.data.roles);
     state.users = loadUsers();
+    saveUsers();
     state.mailQueue = loadMailQueue();
     state.teamManagers = loadTeamManagers();
     state.weekId = state.data.weeks[0]?.id || "";
@@ -2851,7 +2855,8 @@ function loadUsers() {
 }
 
 function normalizeUser(user) {
-  return {
+  const isAdminUser = user.id === "admin" || user.username === "admin" || user.admin === true;
+  const normalized = {
     ...user,
     id: user.id || makeId("user"),
     resourceName: user.resourceName || "",
@@ -2866,6 +2871,15 @@ function normalizeUser(user) {
       delete: Boolean(user.permissions?.delete || user.admin)
     }
   };
+  if (isAdminUser) {
+    normalized.email = "selcuk.dere@fit-global.com";
+    normalized.username = normalized.username || "admin";
+    normalized.resourceName = normalized.resourceName || normalized.name || "Planning Admin";
+    normalized.role = normalized.role || "Project Manager";
+    normalized.active = true;
+    normalized.isResource = true;
+  }
+  return normalized;
 }
 
 function saveUsers() {
@@ -3427,8 +3441,15 @@ function syncResourceUsers() {
         return;
       }
       const desiredInactive = !user.active;
-      if (row.name !== user.name || row.role !== (user.role || "") || row.inactive !== desiredInactive) {
+      const desiredJiraName = user.email || "";
+      if (
+        row.name !== user.name ||
+        row.jiraName !== desiredJiraName ||
+        row.role !== (user.role || "") ||
+        row.inactive !== desiredInactive
+      ) {
         row.name = user.name;
+        row.jiraName = desiredJiraName;
         row.role = user.role || "";
         row.inactive = desiredInactive;
         changed = true;
