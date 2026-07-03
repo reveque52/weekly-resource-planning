@@ -1324,6 +1324,7 @@ function onModalAction(event) {
   if (action === "approve-week-no") closeModal();
   if (action === "weekly-mail-select-all") setWeeklyApprovalMailSelection(true);
   if (action === "weekly-mail-clear") setWeeklyApprovalMailSelection(false);
+  if (action === "weekly-mail-preview-toggle") toggleWeeklyMailPreview(event.target);
   if (action === "weekly-mail-send") sendWeeklyApprovalMails();
   if (action === "open-change-password") openChangePassword();
   if (action === "password-change-save") savePasswordChange();
@@ -2491,20 +2492,31 @@ function openWeeklyApprovalMailDialog() {
     <div class="resource-list mail-recipient-list">
       ${recipients.map((item) => `
         <div class="resource-row mail-recipient-row">
-          <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
           <div class="mail-recipient-content">
             <div class="mail-recipient-head">
               <div>
                 <strong>${escapeHtml(item.resource.name)}</strong>
-                <em>${item.cc ? `CC: ${escapeHtml(item.cc)}` : "No manager CC"}</em>
+                <em>${item.manager ? `Manager: ${escapeHtml(item.manager.name || "-")}` : "No manager CC"}</em>
               </div>
-              <span class="sent-check">Ready</span>
+              <div class="mail-row-actions">
+                <button type="button" data-action="weekly-mail-preview-toggle" data-resource="${escapeAttr(item.resource.name)}">Preview</button>
+                <label class="mail-send-toggle">
+                  <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
+                  <span>Mail iletilecek</span>
+                </label>
+              </div>
             </div>
-            <label class="mail-address-field">
-              <span>To</span>
-              <input class="weekly-mail-to" type="email" value="${escapeAttr(item.to || "")}" data-resource="${escapeAttr(item.resource.name)}" placeholder="mail@company.com">
-            </label>
-            <div class="mail-preview compact">${buildWeeklyPlanMailHtml(week, item.resource)}</div>
+            <div class="mail-address-grid">
+              <label class="mail-address-field">
+                <span>To</span>
+                <input class="weekly-mail-to" type="email" value="${escapeAttr(item.to || "")}" data-resource="${escapeAttr(item.resource.name)}" placeholder="mail@company.com">
+              </label>
+              <label class="mail-address-field">
+                <span>CC</span>
+                <input class="weekly-mail-cc" type="email" value="${escapeAttr(item.cc || "")}" data-resource="${escapeAttr(item.resource.name)}" data-manager-required="${item.manager ? "true" : "false"}" placeholder="${item.manager ? "manager@company.com" : "Optional"}">
+              </label>
+            </div>
+            <div id="weeklyMailPreview-${escapeAttr(item.resource.name)}" class="mail-preview compact hidden">${buildWeeklyPlanMailHtml(week, item.resource)}</div>
           </div>
         </div>
       `).join("") || `<p class="eyebrow">No active resources found for mail sending</p>`}
@@ -2524,6 +2536,13 @@ function setWeeklyApprovalMailSelection(checked) {
   });
 }
 
+function toggleWeeklyMailPreview(button) {
+  const row = button.closest(".mail-recipient-row");
+  const preview = row?.querySelector(".mail-preview");
+  if (!preview) return;
+  preview.classList.toggle("hidden");
+}
+
 function sendWeeklyApprovalMails() {
   if (!requirePermission("change", "You need change authorization to approve the weekly plan.")) return;
   const week = currentWeek();
@@ -2538,18 +2557,28 @@ function sendWeeklyApprovalMails() {
 
   const missing = [];
   const addressByName = new Map();
+  const ccByName = new Map();
   document.querySelectorAll(".weekly-mail-to").forEach((input) => {
     if (!selectedNames.includes(input.dataset.resource)) return;
     const value = input.value.trim();
     addressByName.set(input.dataset.resource, value);
     const invalid = !value || !input.validity.valid;
     input.classList.toggle("input-error", invalid);
-    if (invalid) missing.push(input.dataset.resource);
+    if (invalid) missing.push(`${input.dataset.resource} To`);
+  });
+  document.querySelectorAll(".weekly-mail-cc").forEach((input) => {
+    if (!selectedNames.includes(input.dataset.resource)) return;
+    const value = input.value.trim();
+    ccByName.set(input.dataset.resource, value);
+    const required = input.dataset.managerRequired === "true";
+    const invalid = (required && !value) || (value && !input.validity.valid);
+    input.classList.toggle("input-error", invalid);
+    if (invalid) missing.push(`${input.dataset.resource} CC`);
   });
   if (missing.length) {
     const error = document.querySelector("#weeklyMailError");
-    if (error) error.textContent = `Please enter a valid mail address for: ${missing.join(", ")}`;
-    document.querySelector(".weekly-mail-to.input-error")?.focus();
+    if (error) error.textContent = `Please enter valid mail addresses for: ${missing.join(", ")}`;
+    document.querySelector(".weekly-mail-to.input-error, .weekly-mail-cc.input-error")?.focus();
     return;
   }
 
@@ -2559,7 +2588,7 @@ function sendWeeklyApprovalMails() {
   week.approvedBy = state.currentUser?.name || "Unknown";
   week.approvedByEmail = mailSenderAddress();
   week.approvedAt = new Date().toISOString();
-  queueWeeklyApprovalEmails(week, selectedResources, addressByName);
+  queueWeeklyApprovalEmails(week, selectedResources, addressByName, ccByName);
   saveDrafts();
   render();
   openMailDrafts("Weekly plan approved. Selected mail drafts were generated for controlled sending.");
@@ -2612,7 +2641,12 @@ function mailSenderAddress() {
   return state.currentUser?.email || state.currentUser?.username || "no-reply@company.local";
 }
 
-function queueWeeklyApprovalEmails(week, resources = week.resources.filter((resource) => !resource.inactive), addressByName = new Map()) {
+function queueWeeklyApprovalEmails(
+  week,
+  resources = week.resources.filter((resource) => !resource.inactive),
+  addressByName = new Map(),
+  ccByName = new Map()
+) {
   resources.forEach((resource) => {
     const user = userForResource(resource);
     const manager = managerForResource(resource, user);
@@ -2621,7 +2655,7 @@ function queueWeeklyApprovalEmails(week, resources = week.resources.filter((reso
       subject: `Weekly work plan - ${week.title}`,
       from: mailSenderAddress(),
       to: addressByName.get(resource.name) || user?.email || resource.jiraName || "",
-      cc: manager?.email || "",
+      cc: ccByName.get(resource.name) || manager?.email || "",
       status: "Sent",
       sentAt: new Date().toISOString(),
       html: buildWeeklyPlanMailHtml(week, resource)

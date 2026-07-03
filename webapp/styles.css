@@ -1491,34 +1491,63 @@ textarea {
 }
 
 .mail-recipient-row {
-  grid-template-columns: auto minmax(260px, 1fr);
+  grid-template-columns: minmax(260px, 1fr);
   align-items: start;
-}
-
-.mail-recipient-row input {
-  width: 18px;
-  height: 18px;
 }
 
 .mail-recipient-content {
   display: grid;
   gap: 10px;
+  width: 100%;
 }
 
 .mail-recipient-head {
   display: flex;
   justify-content: space-between;
+  align-items: start;
   gap: 12px;
 }
 
-.sent-check {
-  align-self: start;
+.mail-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.mail-row-actions button {
+  min-height: 32px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+
+.mail-send-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 1px solid #b9dfcc;
   border-radius: 999px;
   color: #1f8f5f;
   font-size: 12px;
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 5px 9px;
+}
+
+.mail-send-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.mail-address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 10px;
 }
 
 .mail-address-field {
