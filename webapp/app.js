@@ -3342,7 +3342,15 @@ function openUserForm(mode, userId = "", returnTo = "admin-panel", preselectedRe
   const userRoleValue = user.role || preselectedResourceItem?.role || "";
 
   const cancelAction = returnTo === "resource-manager" ? "resource-manager" : returnTo === "org" ? "org-cancel" : "admin-panel";
-  state.planningContext = { action: "user-form", mode, userId, returnTo, resourceName: preselectedResource };
+  state.planningContext = {
+    action: "user-form",
+    mode,
+    userId,
+    returnTo,
+    resourceName: preselectedResource,
+    originalUsername: user.username || "",
+    originalEmail: user.email || ""
+  };
   el.modalTitle.textContent = mode === "edit" ? "Edit user" : "New user";
   el.modalMeta.textContent = "Resource user definition";
   el.modalBody.innerHTML = `
@@ -3545,12 +3553,22 @@ function saveUser() {
   const username = document.querySelector("#userUsername").value.trim();
   const email = document.querySelector("#userEmail").value.trim();
   const role = document.querySelector("#userRole").value.trim();
+  const editingUser = context.mode === "edit"
+    ? state.users.find((item) => item.id === context.userId) ||
+      state.users.find((item) =>
+        [item.username, item.email].filter(Boolean).some((value) =>
+          [context.originalUsername, context.originalEmail].filter(Boolean)
+            .map((original) => original.toLowerCase())
+            .includes(value.toLowerCase())
+        )
+      )
+    : null;
   if (!name || !username) {
     openInfoModal("Missing user info", "Name and user name are required.");
     return;
   }
   const duplicate = state.users.some((user) => {
-    if (user.id === context.userId) return false;
+    if (editingUser && user.id === editingUser.id) return false;
     const identities = [user.username, user.email].filter(Boolean).map((value) => value.toLowerCase());
     return identities.includes(username.toLowerCase()) || (email && identities.includes(email.toLowerCase()));
   });
@@ -3567,13 +3585,13 @@ function saveUser() {
     name,
     username,
     email,
-    resourceName: context.mode === "new" ? context.resourceName || "" : state.users.find((item) => item.id === context.userId)?.resourceName || "",
+    resourceName: context.mode === "new" ? context.resourceName || "" : editingUser?.resourceName || "",
     role,
     managerId: document.querySelector("#userManager").value,
     admin: document.querySelector("#userAdmin").checked,
     active: context.mode === "new"
       ? true
-      : state.users.find((item) => item.id === context.userId)?.active !== false,
+      : editingUser?.active !== false,
     isResource: document.querySelector("#userIsResource").checked,
     permissions
   };
@@ -3586,7 +3604,11 @@ function saveUser() {
   if (context.mode === "new") {
     state.users.push({ ...payload, id: makeId("user"), password: document.querySelector("#userPassword").value || "welcome123" });
   } else {
-    const user = state.users.find((item) => item.id === context.userId);
+    const user = editingUser;
+    if (!user) {
+      openInfoModal("User not found", "This user could not be found. Please reopen the user list and try again.");
+      return;
+    }
     Object.assign(user, payload);
     const password = document.querySelector("#userPassword")?.value;
     if (password) user.password = password;
