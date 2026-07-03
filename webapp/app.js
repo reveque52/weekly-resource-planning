@@ -227,11 +227,13 @@ function hydrateFilters() {
   el.planningBody.addEventListener("click", onPlanningClick);
   el.modalClose.addEventListener("click", closeModal);
   el.projectModal.addEventListener("click", (event) => {
+    if (isModalCloseLocked()) return;
     if (event.target === el.projectModal) closeModal();
   });
   el.modalBody.addEventListener("click", onModalAction);
   el.modalBody.addEventListener("input", onModalInput);
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isModalCloseLocked()) return;
     if (event.key === "Escape") closeModal();
     if (event.key === "Escape") el.projectReportProjectMenu.classList.add("hidden");
   });
@@ -1250,6 +1252,12 @@ function openPlanningForm(context) {
 }
 
 function onModalInput(event) {
+  if (event.target.classList?.contains("weekly-mail-to") || event.target.classList?.contains("weekly-mail-cc")) {
+    event.target.classList.remove("input-error");
+    const error = document.querySelector("#weeklyMailError");
+    if (error) error.textContent = "";
+    return;
+  }
   if (event.target.id === "resourceSearch") {
     filterResourceRows(event.target.value);
     return;
@@ -1325,6 +1333,7 @@ function onModalAction(event) {
   if (action === "weekly-mail-select-all") setWeeklyApprovalMailSelection(true);
   if (action === "weekly-mail-clear") setWeeklyApprovalMailSelection(false);
   if (action === "weekly-mail-preview-toggle") toggleWeeklyMailPreview(event.target);
+  if (action === "weekly-mail-copy") copyWeeklyMail(event.target);
   if (action === "weekly-mail-send") sendWeeklyApprovalMails();
   if (action === "open-change-password") openChangePassword();
   if (action === "password-change-save") savePasswordChange();
@@ -2355,6 +2364,10 @@ function closeModal() {
   state.planningContext = null;
 }
 
+function isModalCloseLocked() {
+  return state.planningContext?.action === "weekly-mail-approval";
+}
+
 function mergeSavedDrafts(data) {
   const saved = loadDrafts();
   const deleted = new Set(loadDeletedWeeks());
@@ -2500,6 +2513,7 @@ function openWeeklyApprovalMailDialog() {
               </div>
               <div class="mail-row-actions">
                 <button type="button" data-action="weekly-mail-preview-toggle" data-resource="${escapeAttr(item.resource.name)}">Preview</button>
+                <button type="button" data-action="weekly-mail-copy" data-resource="${escapeAttr(item.resource.name)}">Copy</button>
                 <label class="mail-send-toggle">
                   <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
                   <span>Mail iletilecek</span>
@@ -2522,6 +2536,7 @@ function openWeeklyApprovalMailDialog() {
       `).join("") || `<p class="eyebrow">No active resources found for mail sending</p>`}
     </div>
     <p id="weeklyMailError" class="form-error"></p>
+    <p id="weeklyMailSuccess" class="form-success"></p>
     <div class="modal-actions">
       <button class="secondary" type="button" data-action="close-modal">Cancel</button>
       <button type="button" data-action="weekly-mail-send" ${recipients.length ? "" : "disabled"}>Send</button>
@@ -2541,6 +2556,33 @@ function toggleWeeklyMailPreview(button) {
   const preview = row?.querySelector(".mail-preview");
   if (!preview) return;
   preview.classList.toggle("hidden");
+}
+
+function copyWeeklyMail(button) {
+  const row = button.closest(".mail-recipient-row");
+  if (!row) return;
+  const name = row.querySelector(".weekly-mail-recipient")?.value || "";
+  const to = row.querySelector(".weekly-mail-to")?.value.trim() || "";
+  const cc = row.querySelector(".weekly-mail-cc")?.value.trim() || "";
+  const preview = row.querySelector(".mail-preview");
+  const text = [
+    `To: ${to || "-"}`,
+    `CC: ${cc || "-"}`,
+    `Subject: Weekly work plan - ${currentWeek()?.title || ""}`,
+    "",
+    htmlToPlainText(preview?.innerHTML || "")
+  ].join("\n");
+
+  navigator.clipboard?.writeText(text)
+    .then(() => {
+      const success = document.querySelector("#weeklyMailSuccess");
+      if (success) success.textContent = `${name} mail content copied.`;
+    })
+    .catch(() => {
+      const success = document.querySelector("#weeklyMailSuccess");
+      if (success) success.textContent = "Copy was blocked by the browser. Select the preview text and press Ctrl+C.";
+      preview?.classList.remove("hidden");
+    });
 }
 
 function sendWeeklyApprovalMails() {
@@ -2591,7 +2633,15 @@ function sendWeeklyApprovalMails() {
   queueWeeklyApprovalEmails(week, selectedResources, addressByName, ccByName);
   saveDrafts();
   render();
-  openMailDrafts("Weekly plan approved. Selected mail drafts were generated for controlled sending.");
+  const success = document.querySelector("#weeklyMailSuccess");
+  if (success) {
+    success.textContent = `${selectedResources.length} mail prepared and marked as Sent. Use Copy or Mail drafts to transfer the content to Outlook.`;
+  }
+  selectedNames.forEach((name) => {
+    const row = Array.from(document.querySelectorAll(".mail-recipient-row"))
+      .find((item) => item.querySelector(".weekly-mail-recipient")?.value === name);
+    row?.classList.add("mail-row-sent");
+  });
 }
 
 function queuePlanChangeEmails(week, resources, context, project, note) {
@@ -2728,6 +2778,11 @@ function toggleMailSent(mailId) {
   mail.sentAt = mail.status === "Sent" ? new Date().toISOString() : "";
   saveMailQueue();
   openMailPreview(mailId);
+}
+
+function htmlToPlainText(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function userForResource(resource) {

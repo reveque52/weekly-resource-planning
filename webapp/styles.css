@@ -1580,6 +1580,18 @@ textarea {
   font-weight: 700;
 }
 
+.form-success {
+  min-height: 18px;
+  color: #1f8f5f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mail-row-sent {
+  border-color: #b9dfcc;
+  background: #f5fbf8;
+}
+
 .mail-preview {
   border: 1px solid var(--line);
   border-radius: 8px;
