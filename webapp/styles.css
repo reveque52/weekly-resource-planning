@@ -1490,6 +1490,16 @@ textarea {
   font-weight: 700;
 }
 
+.mail-recipient-row {
+  grid-template-columns: auto minmax(180px, 1fr);
+  cursor: pointer;
+}
+
+.mail-recipient-row input {
+  width: 18px;
+  height: 18px;
+}
+
 .mail-preview {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1603,6 +1613,21 @@ textarea {
   border-color: #c0392b;
   background: #c0392b;
   color: #fff;
+}
+
+.button-link {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  padding: 8px 14px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .delete-together {

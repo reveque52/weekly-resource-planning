@@ -219,7 +219,7 @@ function hydrateFilters() {
   el.currentUserButton.addEventListener("click", openProfileModal);
   el.logoutButton.addEventListener("click", logoutUser);
   el.adminTab?.addEventListener("click", openAdminPanel);
-  el.approveWeekButton.addEventListener("click", approveCurrentWeek);
+  el.approveWeekButton.addEventListener("click", openApproveWeekConfirmation);
   el.orgManageButton.addEventListener("click", openResourceManager);
   el.orgAddButton?.addEventListener("click", () => openTeamMemberPicker(""));
   el.orgChart.addEventListener("click", onOrgChartClick);
@@ -1319,6 +1319,11 @@ function onModalAction(event) {
   if (action === "admin-panel") openAdminPanel();
   if (action === "mail-drafts") openMailDrafts();
   if (action === "mail-view") openMailPreview(event.target.dataset.mailId);
+  if (action === "approve-week-yes") openWeeklyApprovalMailDialog();
+  if (action === "approve-week-no") closeModal();
+  if (action === "weekly-mail-select-all") setWeeklyApprovalMailSelection(true);
+  if (action === "weekly-mail-clear") setWeeklyApprovalMailSelection(false);
+  if (action === "weekly-mail-send") sendWeeklyApprovalMails();
   if (action === "open-change-password") openChangePassword();
   if (action === "password-change-save") savePasswordChange();
   if (action === "password-forgot-save") handleForgotPassword();
@@ -2445,18 +2450,91 @@ function updateApprovalButton() {
   el.approveWeekButton.disabled = !canApprove;
 }
 
-function approveCurrentWeek() {
+function openApproveWeekConfirmation() {
   if (!requirePermission("change", "You need change authorization to approve the weekly plan.")) return;
   const week = currentWeek();
   if (!week) return;
+  state.planningContext = { action: "approve-week", weekId: week.id };
+  el.modalTitle.textContent = "Approve draft";
+  el.modalMeta.textContent = week.title;
+  el.modalBody.innerHTML = `
+    <p class="modal-summary">Do you want to approve this weekly draft and prepare notification mails?</p>
+    <div class="modal-actions">
+      <button class="secondary" type="button" data-action="approve-week-no">No</button>
+      <button type="button" data-action="approve-week-yes">Yes</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function openWeeklyApprovalMailDialog() {
+  if (!requirePermission("change", "You need change authorization to approve the weekly plan.")) return;
+  const week = currentWeek();
+  if (!week || state.planningContext?.weekId !== week.id) return;
+
+  const recipients = approvalMailRecipients(week);
+  state.planningContext = {
+    action: "weekly-mail-approval",
+    weekId: week.id,
+    recipientNames: recipients.map((item) => item.resource.name)
+  };
+  el.modalTitle.textContent = "Weekly approval mails";
+  el.modalMeta.textContent = `From: ${mailSenderAddress()}`;
+  el.modalBody.innerHTML = `
+    <div class="resource-toolbar">
+      <div class="resource-toolbar-actions">
+        <button type="button" data-action="weekly-mail-select-all">Select all</button>
+        <button class="secondary" type="button" data-action="weekly-mail-clear">Clear</button>
+      </div>
+    </div>
+    <div class="resource-list mail-recipient-list">
+      ${recipients.map((item) => `
+        <label class="resource-row mail-recipient-row">
+          <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
+          <div>
+            <strong>${escapeHtml(item.resource.name)}</strong>
+            <span>To: ${escapeHtml(item.to || "-")}</span>
+            <em>${item.cc ? `CC: ${escapeHtml(item.cc)}` : "No manager CC"}</em>
+          </div>
+        </label>
+      `).join("") || `<p class="eyebrow">No active resources found for mail sending</p>`}
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" type="button" data-action="close-modal">Cancel</button>
+      <button type="button" data-action="weekly-mail-send" ${recipients.length ? "" : "disabled"}>Send</button>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function setWeeklyApprovalMailSelection(checked) {
+  document.querySelectorAll(".weekly-mail-recipient").forEach((input) => {
+    input.checked = checked;
+  });
+}
+
+function sendWeeklyApprovalMails() {
+  if (!requirePermission("change", "You need change authorization to approve the weekly plan.")) return;
+  const week = currentWeek();
+  if (!week || state.planningContext?.action !== "weekly-mail-approval" || state.planningContext.weekId !== week.id) return;
+
+  const selectedNames = Array.from(document.querySelectorAll(".weekly-mail-recipient:checked"))
+    .map((input) => input.value);
+  if (!selectedNames.length) {
+    openInfoModal("No recipients selected", "Select at least one person before sending.");
+    return;
+  }
+
+  const selectedResources = week.resources.filter((resource) => selectedNames.includes(resource.name));
   week.draft = false;
   week.approved = true;
   week.approvedBy = state.currentUser?.name || "Unknown";
+  week.approvedByEmail = mailSenderAddress();
   week.approvedAt = new Date().toISOString();
-  queueWeeklyApprovalEmails(week);
+  queueWeeklyApprovalEmails(week, selectedResources);
   saveDrafts();
   render();
-  openMailDrafts("Weekly plan approved. Personal HTML mail drafts were generated.");
+  openMailDrafts("Weekly plan approved. Selected mail drafts were generated for controlled sending.");
 }
 
 function queuePlanChangeEmails(week, resources, context, project, note) {
@@ -2469,6 +2547,7 @@ function queuePlanChangeEmails(week, resources, context, project, note) {
     addMailDraft({
       type: "change",
       subject,
+      from: mailSenderAddress(),
       to: user?.email || resource.jiraName || "",
       cc: manager?.email || "",
       html
@@ -2476,14 +2555,45 @@ function queuePlanChangeEmails(week, resources, context, project, note) {
   });
 }
 
-function queueWeeklyApprovalEmails(week) {
-  week.resources.filter((resource) => !resource.inactive).forEach((resource) => {
+function approvalMailRecipients(week) {
+  return week.resources
+    .filter((resource) => !resource.inactive)
+    .map((resource) => {
+      const user = userForResource(resource);
+      const manager = managerForResource(resource, user);
+      return {
+        resource,
+        user,
+        manager,
+        to: user?.email || resource.jiraName || "",
+        cc: manager?.email || ""
+      };
+    });
+}
+
+function managerForResource(resource, user = userForResource(resource)) {
+  if (user?.managerId) return state.users.find((item) => item.id === user.managerId) || null;
+  if (resource.manager) {
+    const managerResource = resourcesForUserDefinition().find((item) => item.name === resource.manager);
+    return managerResource ? userForResource(managerResource) : null;
+  }
+  return null;
+}
+
+function mailSenderAddress() {
+  return state.currentUser?.email || state.currentUser?.username || "no-reply@company.local";
+}
+
+function queueWeeklyApprovalEmails(week, resources = week.resources.filter((resource) => !resource.inactive)) {
+  resources.forEach((resource) => {
     const user = userForResource(resource);
+    const manager = managerForResource(resource, user);
     addMailDraft({
       type: "weekly",
       subject: `Weekly work plan - ${week.title}`,
+      from: mailSenderAddress(),
       to: user?.email || resource.jiraName || "",
-      cc: "",
+      cc: manager?.email || "",
       html: buildWeeklyPlanMailHtml(week, resource)
     });
   });
@@ -2509,7 +2619,7 @@ function openMailDrafts(message = "") {
         <div class="mail-draft-row">
           <div>
             <strong>${escapeHtml(mail.subject)}</strong>
-            <span>To: ${escapeHtml(mail.to || "-")} ${mail.cc ? `- CC: ${escapeHtml(mail.cc)}` : ""}</span>
+            <span>From: ${escapeHtml(mail.from || "-")} - To: ${escapeHtml(mail.to || "-")} ${mail.cc ? `- CC: ${escapeHtml(mail.cc)}` : ""}</span>
             <em>${escapeHtml(formatAuditDate(mail.createdAt))} - ${escapeHtml(mail.type)}</em>
           </div>
           <button type="button" data-action="mail-view" data-mail-id="${escapeAttr(mail.id)}">Preview</button>
@@ -2528,14 +2638,28 @@ function openMailPreview(mailId) {
   const mail = state.mailQueue.find((item) => item.id === mailId);
   if (!mail) return;
   el.modalTitle.textContent = mail.subject;
-  el.modalMeta.textContent = `To: ${mail.to || "-"}${mail.cc ? ` - CC: ${mail.cc}` : ""}`;
+  el.modalMeta.textContent = `From: ${mail.from || "-"} - To: ${mail.to || "-"}${mail.cc ? ` - CC: ${mail.cc}` : ""}`;
   el.modalBody.innerHTML = `
     <div class="mail-preview">${mail.html}</div>
     <div class="modal-actions">
       <button class="secondary" type="button" data-action="mail-drafts">Back</button>
+      <a class="button-link" href="${escapeAttr(mailtoHref(mail))}">Open mail client</a>
       <button type="button" data-action="close-modal">Close</button>
     </div>
   `;
+}
+
+function mailtoHref(mail) {
+  const params = new URLSearchParams();
+  if (mail.cc) params.set("cc", mail.cc);
+  params.set("subject", mail.subject || "");
+  params.set("body", htmlToPlainText(mail.html || ""));
+  return `mailto:${encodeURIComponent(mail.to || "")}?${params.toString()}`;
+}
+
+function htmlToPlainText(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function userForResource(resource) {
