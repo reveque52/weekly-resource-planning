@@ -1319,6 +1319,7 @@ function onModalAction(event) {
   if (action === "admin-panel") openAdminPanel();
   if (action === "mail-drafts") openMailDrafts();
   if (action === "mail-view") openMailPreview(event.target.dataset.mailId);
+  if (action === "mail-toggle-sent") toggleMailSent(event.target.dataset.mailId);
   if (action === "approve-week-yes") openWeeklyApprovalMailDialog();
   if (action === "approve-week-no") closeModal();
   if (action === "weekly-mail-select-all") setWeeklyApprovalMailSelection(true);
@@ -2489,16 +2490,26 @@ function openWeeklyApprovalMailDialog() {
     </div>
     <div class="resource-list mail-recipient-list">
       ${recipients.map((item) => `
-        <label class="resource-row mail-recipient-row">
+        <div class="resource-row mail-recipient-row">
           <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
-          <div>
-            <strong>${escapeHtml(item.resource.name)}</strong>
-            <span>To: ${escapeHtml(item.to || "-")}</span>
-            <em>${item.cc ? `CC: ${escapeHtml(item.cc)}` : "No manager CC"}</em>
+          <div class="mail-recipient-content">
+            <div class="mail-recipient-head">
+              <div>
+                <strong>${escapeHtml(item.resource.name)}</strong>
+                <em>${item.cc ? `CC: ${escapeHtml(item.cc)}` : "No manager CC"}</em>
+              </div>
+              <span class="sent-check">Ready</span>
+            </div>
+            <label class="mail-address-field">
+              <span>To</span>
+              <input class="weekly-mail-to" type="email" value="${escapeAttr(item.to || "")}" data-resource="${escapeAttr(item.resource.name)}" placeholder="mail@company.com">
+            </label>
+            <div class="mail-preview compact">${buildWeeklyPlanMailHtml(week, item.resource)}</div>
           </div>
-        </label>
+        </div>
       `).join("") || `<p class="eyebrow">No active resources found for mail sending</p>`}
     </div>
+    <p id="weeklyMailError" class="form-error"></p>
     <div class="modal-actions">
       <button class="secondary" type="button" data-action="close-modal">Cancel</button>
       <button type="button" data-action="weekly-mail-send" ${recipients.length ? "" : "disabled"}>Send</button>
@@ -2525,13 +2536,30 @@ function sendWeeklyApprovalMails() {
     return;
   }
 
+  const missing = [];
+  const addressByName = new Map();
+  document.querySelectorAll(".weekly-mail-to").forEach((input) => {
+    if (!selectedNames.includes(input.dataset.resource)) return;
+    const value = input.value.trim();
+    addressByName.set(input.dataset.resource, value);
+    const invalid = !value || !input.validity.valid;
+    input.classList.toggle("input-error", invalid);
+    if (invalid) missing.push(input.dataset.resource);
+  });
+  if (missing.length) {
+    const error = document.querySelector("#weeklyMailError");
+    if (error) error.textContent = `Please enter a valid mail address for: ${missing.join(", ")}`;
+    document.querySelector(".weekly-mail-to.input-error")?.focus();
+    return;
+  }
+
   const selectedResources = week.resources.filter((resource) => selectedNames.includes(resource.name));
   week.draft = false;
   week.approved = true;
   week.approvedBy = state.currentUser?.name || "Unknown";
   week.approvedByEmail = mailSenderAddress();
   week.approvedAt = new Date().toISOString();
-  queueWeeklyApprovalEmails(week, selectedResources);
+  queueWeeklyApprovalEmails(week, selectedResources, addressByName);
   saveDrafts();
   render();
   openMailDrafts("Weekly plan approved. Selected mail drafts were generated for controlled sending.");
@@ -2584,7 +2612,7 @@ function mailSenderAddress() {
   return state.currentUser?.email || state.currentUser?.username || "no-reply@company.local";
 }
 
-function queueWeeklyApprovalEmails(week, resources = week.resources.filter((resource) => !resource.inactive)) {
+function queueWeeklyApprovalEmails(week, resources = week.resources.filter((resource) => !resource.inactive), addressByName = new Map()) {
   resources.forEach((resource) => {
     const user = userForResource(resource);
     const manager = managerForResource(resource, user);
@@ -2592,8 +2620,10 @@ function queueWeeklyApprovalEmails(week, resources = week.resources.filter((reso
       type: "weekly",
       subject: `Weekly work plan - ${week.title}`,
       from: mailSenderAddress(),
-      to: user?.email || resource.jiraName || "",
+      to: addressByName.get(resource.name) || user?.email || resource.jiraName || "",
       cc: manager?.email || "",
+      status: "Sent",
+      sentAt: new Date().toISOString(),
       html: buildWeeklyPlanMailHtml(week, resource)
     });
   });
@@ -2620,9 +2650,12 @@ function openMailDrafts(message = "") {
           <div>
             <strong>${escapeHtml(mail.subject)}</strong>
             <span>From: ${escapeHtml(mail.from || "-")} - To: ${escapeHtml(mail.to || "-")} ${mail.cc ? `- CC: ${escapeHtml(mail.cc)}` : ""}</span>
-            <em>${escapeHtml(formatAuditDate(mail.createdAt))} - ${escapeHtml(mail.type)}</em>
+            <em>${escapeHtml(formatAuditDate(mail.createdAt))} - ${escapeHtml(mail.type)} - ${mail.status === "Sent" ? "Sent" : "Prepared"}</em>
           </div>
-          <button type="button" data-action="mail-view" data-mail-id="${escapeAttr(mail.id)}">Preview</button>
+          <div class="resource-actions">
+            <button type="button" data-action="mail-view" data-mail-id="${escapeAttr(mail.id)}">Preview</button>
+            <button type="button" data-action="mail-toggle-sent" data-mail-id="${escapeAttr(mail.id)}">${mail.status === "Sent" ? "Sent ✓" : "Mark sent"}</button>
+          </div>
         </div>
       `).join("") || `<p class="eyebrow">No mail drafts yet</p>`}
     </div>
@@ -2640,26 +2673,27 @@ function openMailPreview(mailId) {
   el.modalTitle.textContent = mail.subject;
   el.modalMeta.textContent = `From: ${mail.from || "-"} - To: ${mail.to || "-"}${mail.cc ? ` - CC: ${mail.cc}` : ""}`;
   el.modalBody.innerHTML = `
-    <div class="mail-preview">${mail.html}</div>
+    <div class="mail-preview-screen">
+      <label class="sent-inline">
+        <input type="checkbox" ${mail.status === "Sent" ? "checked" : ""} data-action="mail-toggle-sent" data-mail-id="${escapeAttr(mail.id)}">
+        <span>Sent</span>
+      </label>
+      <div class="mail-preview">${mail.html}</div>
+    </div>
     <div class="modal-actions">
       <button class="secondary" type="button" data-action="mail-drafts">Back</button>
-      <a class="button-link" href="${escapeAttr(mailtoHref(mail))}">Open mail client</a>
       <button type="button" data-action="close-modal">Close</button>
     </div>
   `;
 }
 
-function mailtoHref(mail) {
-  const params = new URLSearchParams();
-  if (mail.cc) params.set("cc", mail.cc);
-  params.set("subject", mail.subject || "");
-  params.set("body", htmlToPlainText(mail.html || ""));
-  return `mailto:${encodeURIComponent(mail.to || "")}?${params.toString()}`;
-}
-
-function htmlToPlainText(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
+function toggleMailSent(mailId) {
+  const mail = state.mailQueue.find((item) => item.id === mailId);
+  if (!mail) return;
+  mail.status = mail.status === "Sent" ? "Draft" : "Sent";
+  mail.sentAt = mail.status === "Sent" ? new Date().toISOString() : "";
+  saveMailQueue();
+  openMailPreview(mailId);
 }
 
 function userForResource(resource) {
