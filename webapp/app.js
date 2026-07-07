@@ -48,6 +48,11 @@ const state = {
   planningContext: null
 };
 
+const persistence = {
+  apiAvailable: false,
+  serverState: {}
+};
+
 const el = {
   weekSelect: document.querySelector("#weekSelect"),
   prevWeekButton: document.querySelector("#prevWeekButton"),
@@ -125,9 +130,11 @@ const el = {
   logoutButton: document.querySelector("#logoutButton")
 };
 
-fetch("model/planning.json")
-  .then((response) => response.json())
-  .then((data) => {
+Promise.all([
+  fetch("model/planning.json").then((response) => response.json()),
+  loadServerState()
+])
+  .then(([data]) => {
     state.data = normalizeData(mergeSavedDrafts(data));
     state.data.roles = loadRoleDefinitions(state.data.roles);
     state.users = loadUsers();
@@ -139,6 +146,83 @@ fetch("model/planning.json")
     hydrateFilters();
     hydrateAuth();
   });
+
+async function loadServerState() {
+  try {
+    const response = await fetch("/api/state", { cache: "no-store" });
+    if (!response.ok) throw new Error(`State API ${response.status}`);
+    persistence.serverState = await response.json();
+    persistence.apiAvailable = true;
+    migrateLocalStorageToServer();
+  } catch {
+    persistence.serverState = {};
+    persistence.apiAvailable = false;
+  }
+}
+
+function readJsonStore(key, fallback) {
+  if (persistence.apiAvailable && Object.prototype.hasOwnProperty.call(persistence.serverState, key)) {
+    return persistence.serverState[key];
+  }
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStore(key, value) {
+  persistence.serverState[key] = value;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Local mirror is best-effort; SQLite remains the source when API is available.
+  }
+  if (!persistence.apiAvailable) return;
+  fetch("/api/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [key]: value })
+  }).catch(() => {
+    persistence.apiAvailable = false;
+  });
+}
+
+function migrateLocalStorageToServer() {
+  if (!persistence.apiAvailable) return;
+  const keys = [
+    STORAGE_KEY,
+    DELETED_WEEKS_KEY,
+    PROJECT_META_KEY,
+    USERS_KEY,
+    MAIL_QUEUE_KEY,
+    TEAM_MANAGERS_KEY,
+    ROLES_KEY,
+    SEARCH_VARIANTS_KEY
+  ];
+  const migration = {};
+  keys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(persistence.serverState, key)) return;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const value = JSON.parse(raw);
+      persistence.serverState[key] = value;
+      migration[key] = value;
+    } catch {
+      // Ignore invalid old browser state.
+    }
+  });
+  if (Object.keys(migration).length) {
+    fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(migration)
+    }).catch(() => {
+      persistence.apiAvailable = false;
+    });
+  }
+}
 
 function hydrateFilters() {
   renderFilterOptions();
@@ -279,16 +363,12 @@ function currentSearchVariantUserKey() {
 }
 
 function loadSearchVariants() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(SEARCH_VARIANTS_KEY) || "{}");
-    return stored && typeof stored === "object" ? stored : {};
-  } catch {
-    return {};
-  }
+  const stored = readJsonStore(SEARCH_VARIANTS_KEY, {});
+  return stored && typeof stored === "object" ? stored : {};
 }
 
 function saveSearchVariants(allVariants) {
-  localStorage.setItem(SEARCH_VARIANTS_KEY, JSON.stringify(allVariants));
+  writeJsonStore(SEARCH_VARIANTS_KEY, allVariants);
 }
 
 function userSearchVariants() {
@@ -2209,7 +2289,7 @@ function deleteLatestWeek() {
   if (removed) {
     const deleted = new Set(loadDeletedWeeks());
     deleted.add(removed.id);
-    localStorage.setItem(DELETED_WEEKS_KEY, JSON.stringify(Array.from(deleted)));
+    writeJsonStore(DELETED_WEEKS_KEY, Array.from(deleted));
   }
   state.weekId = state.data.weeks[0]?.id || "";
   state.activeSelection = null;
@@ -2411,32 +2491,20 @@ function weekProjects(week) {
 }
 
 function loadDrafts() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
+  return readJsonStore(STORAGE_KEY, []);
 }
 
 function loadDeletedWeeks() {
-  try {
-    return JSON.parse(localStorage.getItem(DELETED_WEEKS_KEY) || "[]");
-  } catch {
-    return [];
-  }
+  return readJsonStore(DELETED_WEEKS_KEY, []);
 }
 
 function loadProjectDefinitions() {
-  try {
-    return JSON.parse(localStorage.getItem(PROJECT_META_KEY) || "{}");
-  } catch {
-    return {};
-  }
+  return readJsonStore(PROJECT_META_KEY, {});
 }
 
 function saveDrafts() {
   const drafts = state.data.weeks.filter((week) => week.draft);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+  writeJsonStore(STORAGE_KEY, drafts);
 }
 
 function markWeekDraft(week) {
@@ -2447,19 +2515,15 @@ function markWeekDraft(week) {
 }
 
 function saveProjectDefinitions() {
-  localStorage.setItem(PROJECT_META_KEY, JSON.stringify(state.data.projectMeta || {}));
+  writeJsonStore(PROJECT_META_KEY, state.data.projectMeta || {});
 }
 
 function loadMailQueue() {
-  try {
-    return JSON.parse(localStorage.getItem(MAIL_QUEUE_KEY) || "[]");
-  } catch {
-    return [];
-  }
+  return readJsonStore(MAIL_QUEUE_KEY, []);
 }
 
 function saveMailQueue() {
-  localStorage.setItem(MAIL_QUEUE_KEY, JSON.stringify(state.mailQueue));
+  writeJsonStore(MAIL_QUEUE_KEY, state.mailQueue);
 }
 
 function updateApprovalButton() {
@@ -2844,13 +2908,9 @@ function buildWeeklyPlanMailHtml(week, resource) {
 }
 
 function loadUsers() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
-    if (Array.isArray(saved) && saved.length) return saved.map(normalizeUser);
-  } catch {
-    // Ignore invalid local demo data and restore defaults.
-  }
-  localStorage.setItem(USERS_KEY, JSON.stringify(DEFAULT_USERS));
+  const saved = readJsonStore(USERS_KEY, []);
+  if (Array.isArray(saved) && saved.length) return saved.map(normalizeUser);
+  writeJsonStore(USERS_KEY, DEFAULT_USERS);
   return DEFAULT_USERS.map(normalizeUser);
 }
 
@@ -2883,36 +2943,28 @@ function normalizeUser(user) {
 }
 
 function saveUsers() {
-  localStorage.setItem(USERS_KEY, JSON.stringify(state.users));
+  writeJsonStore(USERS_KEY, state.users);
 }
 
 function loadTeamManagers() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(TEAM_MANAGERS_KEY) || "{}");
-    return stored && typeof stored === "object" ? stored : {};
-  } catch {
-    return {};
-  }
+  const stored = readJsonStore(TEAM_MANAGERS_KEY, {});
+  return stored && typeof stored === "object" ? stored : {};
 }
 
 function saveTeamManagers() {
-  localStorage.setItem(TEAM_MANAGERS_KEY, JSON.stringify(state.teamManagers || {}));
+  writeJsonStore(TEAM_MANAGERS_KEY, state.teamManagers || {});
 }
 
 function loadRoleDefinitions(sourceRoles = []) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(ROLES_KEY) || "[]");
-    if (Array.isArray(saved) && saved.length) {
-      return normalizeRoleList([...DEFAULT_ROLES, ...(sourceRoles || []), ...saved]);
-    }
-  } catch {
-    // Ignore invalid role data and restore from source defaults.
+  const saved = readJsonStore(ROLES_KEY, []);
+  if (Array.isArray(saved) && saved.length) {
+    return normalizeRoleList([...DEFAULT_ROLES, ...(sourceRoles || []), ...saved]);
   }
   return normalizeRoleList([...DEFAULT_ROLES, ...(sourceRoles || [])]);
 }
 
 function saveRoleDefinitions() {
-  localStorage.setItem(ROLES_KEY, JSON.stringify(state.data.roles || []));
+  writeJsonStore(ROLES_KEY, state.data.roles || []);
 }
 
 function normalizeRoleList(roles = []) {

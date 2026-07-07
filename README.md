@@ -17,10 +17,10 @@ http://localhost:8080/
 ## Default login
 
 - User name: `admin`
-- Email: `admin@company.local`
+- Email: `selcuk.dere@fit-global.com`
 - Password: `admin123`
 
-Users and permissions are stored in the browser for this local demo. Use the Resources screen to maintain users, passwords, and read, change, delete, and admin permissions.
+Users and permissions are stored in the local SQLite database. Use the Resources screen to maintain users, passwords, and read, change, delete, and admin permissions.
 
 ## Workflow notes
 
@@ -35,8 +35,23 @@ Users and permissions are stored in the browser for this local demo. Use the Res
 - HTML
 - CSS
 - Vanilla JavaScript
-- Node.js static server
+- Node.js server
+- SQLite via Node.js `node:sqlite`
 
 ## Data
 
-The app reads planning data from `webapp/model/planning.json` and stores browser-side draft changes in `localStorage`.
+The app reads initial planning data from `webapp/model/planning.json`.
+
+Runtime changes are stored in SQLite:
+
+```text
+data/app.db
+```
+
+The database file is ignored by Git. The schema is documented in:
+
+```text
+db/schema.sql
+```
+
+The browser keeps only the active session id in `localStorage`; planning data, users, projects, roles, mail drafts, deleted weeks, and search variants are persisted through `/api/state`.
