@@ -33,7 +33,8 @@ const state = {
   search: "",
   role: "All",
   project: "All",
-  view: "grid",
+  view: "home",
+  consultantProfileName: "",
   personSummaryName: "",
   personSummaryPeriod: "week",
   projectReportPeriod: "week",
@@ -43,6 +44,14 @@ const state = {
   projectReportProjects: [],
   mailQueue: [],
   teamManagers: {},
+  weather: {
+    loading: false,
+    loaded: false,
+    location: "Istanbul",
+    temperature: "",
+    summary: "Konum izni bekleniyor",
+    kind: "loading"
+  },
   notesOpen: false,
   activeSelection: null,
   planningContext: null
@@ -73,24 +82,74 @@ const el = {
   projectMetric: document.querySelector("#projectMetric"),
   updatedText: document.querySelector("#updatedText"),
   pageTitle: document.querySelector("#pageTitle"),
+  welcomeText: document.querySelector("#welcomeText"),
+  welcomeSubtext: document.querySelector("#welcomeSubtext"),
+  weatherTemp: document.querySelector("#weatherTemp"),
+  weatherLocation: document.querySelector("#weatherLocation"),
+  weatherSummary: document.querySelector("#weatherSummary"),
+  weatherScene: document.querySelector("#weatherScene"),
   planningHead: document.querySelector("#planningHead"),
   planningBody: document.querySelector("#planningBody"),
+  homeTab: document.querySelector("#homeTab"),
   gridTab: document.querySelector("#gridTab"),
-  summaryTab: document.querySelector("#summaryTab"),
+  assistantTab: document.querySelector("#assistantTab"),
+  consultantProfileTab: document.querySelector("#consultantProfileTab"),
   personSummaryTab: document.querySelector("#personSummaryTab"),
   projectReportTab: document.querySelector("#projectReportTab"),
   orgTab: document.querySelector("#orgTab"),
   gridView: document.querySelector("#gridView"),
-  summaryView: document.querySelector("#summaryView"),
+  consultantProfileView: document.querySelector("#consultantProfileView"),
   personSummaryView: document.querySelector("#personSummaryView"),
   projectReportView: document.querySelector("#projectReportView"),
   orgView: document.querySelector("#orgView"),
+  homeView: document.querySelector("#homeView"),
+  assistantView: document.querySelector("#assistantView"),
+  dashboardTitle: document.querySelector("#dashboardTitle"),
+  dashboardMeta: document.querySelector("#dashboardMeta"),
+  dashboardStatus: document.querySelector("#dashboardStatus"),
+  dashboardResourceCount: document.querySelector("#dashboardResourceCount"),
+  dashboardSlotCount: document.querySelector("#dashboardSlotCount"),
+  dashboardOpenSlotCount: document.querySelector("#dashboardOpenSlotCount"),
+  dashboardProjectCount: document.querySelector("#dashboardProjectCount"),
+  dashboardAttentionCount: document.querySelector("#dashboardAttentionCount"),
+  dashboardAttentionList: document.querySelector("#dashboardAttentionList"),
+  dashboardAvailableCount: document.querySelector("#dashboardAvailableCount"),
+  dashboardAvailableList: document.querySelector("#dashboardAvailableList"),
+  dashboardDemandList: document.querySelector("#dashboardDemandList"),
+  dashboardTopProjectCount: document.querySelector("#dashboardTopProjectCount"),
+  dashboardTopProjectPie: document.querySelector("#dashboardTopProjectPie"),
+  dashboardTopProjectLegend: document.querySelector("#dashboardTopProjectLegend"),
+  dashboardRoleCount: document.querySelector("#dashboardRoleCount"),
+  dashboardRolePie: document.querySelector("#dashboardRolePie"),
+  dashboardRoleLegend: document.querySelector("#dashboardRoleLegend"),
+  assistantTitle: document.querySelector("#assistantTitle"),
+  assistantMeta: document.querySelector("#assistantMeta"),
+  assistantRefreshButton: document.querySelector("#assistantRefreshButton"),
+  assistantGapCount: document.querySelector("#assistantGapCount"),
+  assistantGapList: document.querySelector("#assistantGapList"),
+  assistantSuggestionCount: document.querySelector("#assistantSuggestionCount"),
+  assistantSuggestionList: document.querySelector("#assistantSuggestionList"),
+  assistantAvailableCount: document.querySelector("#assistantAvailableCount"),
+  assistantAvailableList: document.querySelector("#assistantAvailableList"),
   orgChart: document.querySelector("#orgChart"),
   orgManageButton: document.querySelector("#orgManageButton"),
   orgAddButton: document.querySelector("#orgAddButton"),
-  projectBars: document.querySelector("#projectBars"),
-  roleBars: document.querySelector("#roleBars"),
   personSummarySelect: document.querySelector("#personSummarySelect"),
+  consultantProfileSelect: document.querySelector("#consultantProfileSelect"),
+  consultantProfileName: document.querySelector("#consultantProfileName"),
+  consultantProfileRole: document.querySelector("#consultantProfileRole"),
+  consultantProfileEditButton: document.querySelector("#consultantProfileEditButton"),
+  consultantProfileDetails: document.querySelector("#consultantProfileDetails"),
+  consultantWeekLoad: document.querySelector("#consultantWeekLoad"),
+  consultantOpenSlots: document.querySelector("#consultantOpenSlots"),
+  consultantYearLoad: document.querySelector("#consultantYearLoad"),
+  consultantWeekMeta: document.querySelector("#consultantWeekMeta"),
+  consultantWeekPlan: document.querySelector("#consultantWeekPlan"),
+  consultantProjectMixMeta: document.querySelector("#consultantProjectMixMeta"),
+  consultantProjectPie: document.querySelector("#consultantProjectPie"),
+  consultantProjectLegend: document.querySelector("#consultantProjectLegend"),
+  consultantHistoryMeta: document.querySelector("#consultantHistoryMeta"),
+  consultantHistoryList: document.querySelector("#consultantHistoryList"),
   personPeriodSelect: document.querySelector("#personPeriodSelect"),
   personPie: document.querySelector("#personPie"),
   personSummaryMeta: document.querySelector("#personSummaryMeta"),
@@ -256,14 +315,27 @@ function hydrateFilters() {
   el.clearSearchVariantButton.addEventListener("click", clearSearchFilters);
   el.resourceMetric.addEventListener("click", openResourceManager);
   el.projectMetric.addEventListener("click", openProjectManager);
+  el.homeView.addEventListener("click", onDashboardAction);
+  el.assistantView.addEventListener("click", onAssistantAction);
+  el.assistantRefreshButton.addEventListener("click", render);
+  el.homeTab.addEventListener("click", () => setView("home"));
   el.gridTab.addEventListener("click", () => setView("grid"));
-  el.summaryTab.addEventListener("click", () => setView("summary"));
+  el.assistantTab.addEventListener("click", () => setView("assistant"));
+  el.consultantProfileTab.addEventListener("click", () => setView("consultantProfile"));
   el.personSummaryTab.addEventListener("click", () => setView("person"));
   el.projectReportTab.addEventListener("click", () => setView("projectReport"));
   el.orgTab.addEventListener("click", () => setView("org"));
   el.personSummarySelect.addEventListener("change", (event) => {
     state.personSummaryName = event.target.value;
     render();
+  });
+  el.consultantProfileSelect.addEventListener("change", (event) => {
+    state.consultantProfileName = event.target.value;
+    render();
+  });
+  el.consultantProfileEditButton.addEventListener("click", () => {
+    if (!state.consultantProfileName) return;
+    openResourceLinkedUser(state.consultantProfileName);
   });
   el.personPeriodSelect.addEventListener("change", (event) => {
     state.personSummaryPeriod = event.target.value;
@@ -345,10 +417,15 @@ function renderFilterOptions() {
   renderSearchVariants();
   const people = uniquePeople();
   if (!state.personSummaryName && people.length) state.personSummaryName = people[0];
+  if (!state.consultantProfileName && people.length) state.consultantProfileName = people[0];
   el.personSummarySelect.innerHTML = people
     .map((name) => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`)
     .join("");
+  el.consultantProfileSelect.innerHTML = people
+    .map((name) => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`)
+    .join("");
   el.personSummarySelect.value = state.personSummaryName;
+  el.consultantProfileSelect.value = state.consultantProfileName;
   el.personPeriodSelect.value = state.personSummaryPeriod;
   syncReportProjectSelection();
   syncProjectReportDates();
@@ -485,20 +562,149 @@ function showApp() {
   el.loginScreen.classList.add("hidden");
   el.appShell.classList.remove("hidden");
   syncUserChrome();
+  refreshWelcomeCard();
+  loadWelcomeWeather();
   renderFilterOptions();
+  setView(state.view);
   render();
 }
 
 function syncUserChrome() {
   const user = state.currentUser;
   el.currentUserButton.textContent = user ? `${user.name}${user.admin ? " (Admin)" : ""}` : "";
+  refreshWelcomeCard();
   el.adminTab?.classList.add("hidden");
   el.orgManageButton.classList.toggle("hidden", !user?.admin);
   el.orgAddButton?.classList.toggle("hidden", !user?.admin);
-  if (state.view === "admin") setView("grid");
+  if (state.view === "admin") setView("home");
   el.newWeekButton.disabled = !canChange();
   el.clearWeekButton.disabled = !canDelete();
   updateApprovalButton();
+}
+
+function refreshWelcomeCard() {
+  if (!el.welcomeText) return;
+  const userName = state.currentUser?.name || "there";
+  el.welcomeText.textContent = `${greetingForNow()}, ${userName}`;
+  el.welcomeSubtext.textContent = "Planlama ekranı hazır.";
+  el.weatherTemp.textContent = state.weather.temperature || "--";
+  el.weatherLocation.textContent = state.weather.location || "Konum yükleniyor";
+  el.weatherSummary.textContent = state.weather.summary || "Hava durumu yükleniyor";
+  el.weatherScene.className = `weather-scene weather-${state.weather.kind || "loading"}`;
+}
+
+function greetingForNow(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "Günaydın";
+  if (hour < 18) return "İyi günler";
+  return "İyi akşamlar";
+}
+
+async function loadWelcomeWeather() {
+  if (state.weather.loading || state.weather.loaded) return;
+  state.weather.loading = true;
+  refreshWelcomeCard();
+  try {
+    const coords = await currentBrowserPosition();
+    const weather = await fetchWeatherForCoords(coords.latitude, coords.longitude);
+    state.weather = { ...state.weather, ...weather, loaded: true, loading: false };
+  } catch {
+    try {
+      const weather = await fetchWeatherForCoords(41.0082, 28.9784, "Istanbul");
+      state.weather = { ...state.weather, ...weather, loaded: true, loading: false };
+    } catch {
+      state.weather = {
+        ...state.weather,
+        location: "Istanbul",
+        temperature: "--",
+        summary: "Hava durumu alınamadı",
+        kind: "cloudy",
+        loaded: true,
+        loading: false
+      };
+    }
+  }
+  refreshWelcomeCard();
+}
+
+function currentBrowserPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation unavailable"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve(position.coords),
+      reject,
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 900000 }
+    );
+  });
+}
+
+async function fetchWeatherForCoords(latitude, longitude, fallbackLocation = "Mevcut konum") {
+  const params = new URLSearchParams({
+    latitude: latitude.toFixed(4),
+    longitude: longitude.toFixed(4),
+    current: "temperature_2m,weather_code",
+    timezone: "auto"
+  });
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  if (!response.ok) throw new Error("Weather request failed");
+  const payload = await response.json();
+  const location = await reverseGeocode(latitude, longitude).catch(() => fallbackLocation);
+  const temperature = payload.current?.temperature_2m;
+  return {
+    location,
+    temperature: Number.isFinite(temperature) ? `${Math.round(temperature)}°C` : "--",
+    summary: weatherCodeLabel(payload.current?.weather_code),
+    kind: weatherCodeKind(payload.current?.weather_code)
+  };
+}
+
+async function reverseGeocode(latitude, longitude) {
+  const params = new URLSearchParams({
+    latitude: latitude.toFixed(4),
+    longitude: longitude.toFixed(4),
+    localityLanguage: "en"
+  });
+  const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?${params.toString()}`);
+  if (!response.ok) throw new Error("Location request failed");
+  const payload = await response.json();
+  return payload.city || payload.locality || payload.principalSubdivision || payload.countryName || "Current location";
+}
+
+function weatherCodeLabel(code) {
+  const labels = {
+    0: "Açık",
+    1: "Az bulutlu",
+    2: "Parçalı bulutlu",
+    3: "Bulutlu",
+    45: "Sisli",
+    48: "Sisli",
+    51: "Hafif çisenti",
+    53: "Çisenti",
+    55: "Yoğun çisenti",
+    61: "Hafif yağmur",
+    63: "Yağmur",
+    65: "Kuvvetli yağmur",
+    71: "Hafif kar",
+    73: "Kar",
+    75: "Yoğun kar",
+    80: "Hafif sağanak",
+    81: "Sağanak",
+    82: "Kuvvetli sağanak",
+    95: "Gök gürültülü"
+  };
+  return labels[code] || "Hava durumu güncel";
+}
+
+function weatherCodeKind(code) {
+  if ([0, 1].includes(code)) return "sunny";
+  if ([2, 3, 45, 48].includes(code)) return "cloudy";
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return "rainy";
+  if ([71, 73, 75].includes(code)) return "snowy";
+  if ([95].includes(code)) return "stormy";
+  return "cloudy";
 }
 
 function loginUser(event) {
@@ -556,23 +762,31 @@ function projectDefinition(project) {
     state.data.projectMeta[project] = {
       manager: "",
       budgetDays: "",
+      demands: {},
       inactive: false,
       deleted: false
     };
+  }
+  if (!state.data.projectMeta[project].demands || typeof state.data.projectMeta[project].demands !== "object") {
+    state.data.projectMeta[project].demands = {};
   }
   return state.data.projectMeta[project];
 }
 
 function setView(view) {
   state.view = view;
+  el.homeTab.classList.toggle("active", view === "home");
   el.gridTab.classList.toggle("active", view === "grid");
-  el.summaryTab.classList.toggle("active", view === "summary");
+  el.assistantTab.classList.toggle("active", view === "assistant");
+  el.consultantProfileTab.classList.toggle("active", view === "consultantProfile");
   el.personSummaryTab.classList.toggle("active", view === "person");
   el.projectReportTab.classList.toggle("active", view === "projectReport");
   el.orgTab.classList.toggle("active", view === "org");
   el.adminTab?.classList.toggle("active", view === "admin");
+  el.homeView.classList.toggle("hidden", view !== "home");
+  el.assistantView.classList.toggle("hidden", view !== "assistant");
   el.gridView.classList.toggle("hidden", view !== "grid");
-  el.summaryView.classList.toggle("hidden", view !== "summary");
+  el.consultantProfileView.classList.toggle("hidden", view !== "consultantProfile");
   el.personSummaryView.classList.toggle("hidden", view !== "person");
   el.projectReportView.classList.toggle("hidden", view !== "projectReport");
   el.orgView.classList.toggle("hidden", view !== "org");
@@ -739,17 +953,324 @@ function render() {
   el.prevWeekButton.disabled = weekIndex === state.data.weeks.length - 1;
   el.newWeekButton.disabled = !canChange();
   el.clearWeekButton.disabled = !canDelete();
+  const plannedSlots = Object.values(projectLoads).reduce((sum, value) => sum + value, 0);
+  const plannedProjects = Object.keys(projectLoads).length;
   el.resourceCount.textContent = resources.length;
-  el.assignmentCount.textContent = Object.values(projectLoads).reduce((sum, value) => sum + value, 0);
-  el.projectCount.textContent = Object.keys(projectLoads).length;
+  el.assignmentCount.textContent = plannedSlots;
+  el.projectCount.textContent = plannedProjects;
 
+  renderDashboard(week, resources, projectLoads, roleLoads);
+  renderPlanningAssistant(week, resources);
   renderGrid(week, resources);
-  renderBars(el.projectBars, projectLoads, 18);
-  renderBars(el.roleBars, roleLoads, 10);
+  renderConsultantProfile();
   renderPersonSummary();
   renderProjectReport();
   if (state.view === "org") renderOrgChart();
   updateApprovalButton();
+}
+
+function renderDashboard(week, resources, projectLoads, roleLoads) {
+  const plannedSlots = Object.values(projectLoads).reduce((sum, value) => sum + value, 0);
+  const totalSlots = resources.length * week.days.length * 2;
+  const openSlots = Math.max(0, totalSlots - plannedSlots);
+  const roleSlotLoads = countRoleSlots(resources);
+  const attentionItems = dashboardAttentionItems(week, resources, openSlots);
+  const available = dashboardAvailableResources(resources).slice(0, 8);
+
+  el.dashboardTitle.textContent = `${week.title} Dashboard`;
+  el.dashboardMeta.textContent = `${resources.length} visible consultant${resources.length === 1 ? "" : "s"} - ${formatDays(plannedSlots / 2)} days planned`;
+  el.dashboardStatus.textContent = week.approved ? "Approved" : week.draft ? "Draft" : "Active";
+  el.dashboardStatus.className = `dashboard-status ${week.approved ? "approved" : week.draft ? "draft" : ""}`;
+  el.dashboardResourceCount.textContent = resources.length;
+  el.dashboardSlotCount.textContent = plannedSlots;
+  el.dashboardOpenSlotCount.textContent = openSlots;
+  el.dashboardProjectCount.textContent = Object.keys(projectLoads).length;
+  el.dashboardAttentionCount.textContent = `${attentionItems.length} item${attentionItems.length === 1 ? "" : "s"}`;
+  el.dashboardAttentionList.innerHTML = attentionItems.length
+    ? attentionItems.map((item) => `
+      <div class="dashboard-list-row ${item.level}">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.detail)}</span>
+      </div>
+    `).join("")
+    : `<p class="dashboard-empty">No urgent items for this view.</p>`;
+  el.dashboardAvailableCount.textContent = `${available.length} shown`;
+  el.dashboardAvailableList.innerHTML = available.length
+    ? available.map((item) => `
+      <div class="dashboard-list-row">
+        <button class="dashboard-link" type="button" data-action="open-consultant-profile" data-person="${escapeAttr(item.resource.name)}">${escapeHtml(item.resource.name)}</button>
+        <span>${escapeHtml(item.resource.role || "-")} - ${item.slots}/10 slots planned</span>
+      </div>
+    `).join("")
+    : `<p class="dashboard-empty">No available consultants in the current filter.</p>`;
+  renderDashboardDemands(week, resources);
+  el.dashboardTopProjectCount.textContent = `${Object.keys(projectLoads).length} projects`;
+  renderDashboardPie(el.dashboardTopProjectPie, el.dashboardTopProjectLegend, projectLoads, {
+    limit: 7,
+    valueSuffix: " slots"
+  });
+  el.dashboardRoleCount.textContent = `${Object.keys(roleLoads).length} roles`;
+  renderDashboardPie(el.dashboardRolePie, el.dashboardRoleLegend, roleSlotLoads, {
+    limit: 7,
+    valueSuffix: " slots"
+  });
+}
+
+function renderDashboardDemands(week, resources) {
+  const rows = projectDemandRows(week, resources);
+  el.dashboardDemandList.innerHTML = rows.length
+    ? rows.slice(0, 8).map((row) => {
+      const level = row.gap > 0 ? "danger" : row.gap < 0 ? "info" : "";
+      const status = row.gap > 0
+        ? `${row.gap} open`
+        : row.gap < 0
+          ? `${Math.abs(row.gap)} extra`
+          : "Covered";
+      return `
+        <div class="dashboard-list-row ${level}">
+          <strong>${escapeHtml(row.project)} - ${escapeHtml(row.role)}</strong>
+          <span>Needed ${row.required}, planned ${row.planned} · ${status}</span>
+        </div>
+      `;
+    }).join("")
+    : `<p class="dashboard-empty">No project demands defined for this week.</p>`;
+}
+
+function projectDemandRows(week, resources) {
+  return activeProjects()
+    .flatMap((project) => {
+      const weeklyDemand = projectWeekDemand(project, week.id);
+      return Object.entries(weeklyDemand)
+        .map(([role, required]) => ({
+          project,
+          role,
+          required: Number(required) || 0,
+          planned: plannedProjectRolePeople(resources, project, role)
+        }))
+        .filter((row) => row.required > 0)
+        .map((row) => ({ ...row, gap: row.required - row.planned }));
+    })
+    .sort((a, b) => b.gap - a.gap || b.required - a.required || a.project.localeCompare(b.project));
+}
+
+function projectWeekDemand(project, weekId) {
+  const definition = projectDefinition(project);
+  if (!definition.demands[weekId] || typeof definition.demands[weekId] !== "object") {
+    definition.demands[weekId] = {};
+  }
+  return definition.demands[weekId];
+}
+
+function plannedProjectRolePeople(resources, project, role) {
+  return resources.filter((resource) => {
+    if ((resource.role || "") !== role) return false;
+    return Object.values(resource.assignments || {}).some((day) => day.am === project || day.pm === project);
+  }).length;
+}
+
+function renderDashboardPie(chart, legend, data, options = {}) {
+  const colors = ["#0b6bcb", "#2aa876", "#e0a019", "#c0392b", "#6f42c1", "#00838f", "#8d6e63", "#455a64"];
+  const limit = options.limit || 7;
+  const entries = Object.entries(data).slice(0, limit);
+  const overflow = Object.entries(data).slice(limit).reduce((sum, entry) => sum + entry[1], 0);
+  if (overflow) entries.push(["Other", overflow]);
+  const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+
+  if (!total) {
+    chart.style.background = "#e6edf3";
+    chart.innerHTML = `<span class="dashboard-pie-empty">No data</span>`;
+    legend.innerHTML = `<p class="dashboard-empty">No planning data for this view.</p>`;
+    return;
+  }
+
+  let cursor = 0;
+  const slices = entries.map(([, value], index) => {
+    const start = cursor;
+    const end = cursor + (value / total) * 100;
+    cursor = end;
+    return `${colors[index % colors.length]} ${start}% ${end}%`;
+  });
+
+  chart.style.background = `conic-gradient(${slices.join(", ")})`;
+  chart.innerHTML = `<span class="dashboard-pie-total"><strong>${total}</strong><em>Total</em></span>`;
+  legend.innerHTML = entries.map(([label, value], index) => {
+    const percent = Math.round((value / total) * 100);
+    return `
+      <div class="dashboard-pie-row">
+        <span class="legend-swatch" style="background:${colors[index % colors.length]}"></span>
+        <span class="legend-label" title="${escapeAttr(label)}">${escapeHtml(label)}</span>
+        <strong>${value}</strong>
+        <span>${percent}%</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderPlanningAssistant(week, resources) {
+  const gaps = projectDemandRows(week, resources).filter((row) => row.gap > 0);
+  const suggestions = planningAssistantSuggestions(week, resources, gaps);
+  const available = dashboardAvailableResources(resources).slice(0, 10);
+
+  el.assistantTitle.textContent = `${week.title} Planning Assistant`;
+  el.assistantMeta.textContent = `${gaps.length} demand gap${gaps.length === 1 ? "" : "s"} · ${suggestions.length} actionable suggestion${suggestions.length === 1 ? "" : "s"}`;
+  el.assistantGapCount.textContent = `${gaps.length} gap${gaps.length === 1 ? "" : "s"}`;
+  el.assistantGapList.innerHTML = gaps.length
+    ? gaps.map((row) => `
+      <div class="dashboard-list-row danger">
+        <strong>${escapeHtml(row.project)} - ${escapeHtml(row.role)}</strong>
+        <span>Needed ${row.required}, planned ${row.planned}; ${row.gap} still open</span>
+      </div>
+    `).join("")
+    : `<p class="dashboard-empty">No demand gaps in the current week.</p>`;
+
+  el.assistantSuggestionCount.textContent = `${suggestions.length} suggestion${suggestions.length === 1 ? "" : "s"}`;
+  el.assistantSuggestionList.innerHTML = suggestions.length
+    ? suggestions.map((item) => `
+      <div class="assistant-suggestion">
+        <div>
+          <strong>${escapeHtml(item.resource.name)} → ${escapeHtml(item.project)}</strong>
+          <span>${escapeHtml(item.role)} · ${escapeHtml(item.day.label)} ${escapeHtml(item.period.toUpperCase())} · current load ${item.load}/10</span>
+        </div>
+        <button type="button" data-action="assistant-apply" data-resource="${escapeAttr(item.resource.name)}" data-project="${escapeAttr(item.project)}" data-day="${escapeAttr(item.day.key)}" data-period="${escapeAttr(item.period)}">Apply</button>
+      </div>
+    `).join("")
+    : `<p class="dashboard-empty">No safe automatic suggestion found. Add demand or free a consultant slot.</p>`;
+
+  el.assistantAvailableCount.textContent = `${available.length} shown`;
+  el.assistantAvailableList.innerHTML = available.length
+    ? available.map((item) => {
+      const openSlot = firstOpenSlot(item.resource, week);
+      return `
+        <div class="dashboard-list-row">
+          <button class="dashboard-link" type="button" data-action="open-consultant-profile" data-person="${escapeAttr(item.resource.name)}">${escapeHtml(item.resource.name)}</button>
+          <span>${escapeHtml(item.resource.role || "-")} · ${item.slots}/10 planned · ${openSlot ? `${escapeHtml(openSlot.day.label)} ${escapeHtml(openSlot.period.toUpperCase())} open` : "No open slot"}</span>
+        </div>
+      `;
+    }).join("")
+    : `<p class="dashboard-empty">No low-load consultants in the current filter.</p>`;
+}
+
+function planningAssistantSuggestions(week, resources, gaps) {
+  const usedResources = new Set();
+  return gaps.flatMap((gap) => {
+    const candidates = resources
+      .map((resource) => ({
+        resource,
+        load: plannedSlotCount(resource),
+        openSlot: firstOpenSlot(resource, week)
+      }))
+      .filter((item) =>
+        item.openSlot &&
+        item.load < week.days.length * 2 &&
+        !usedResources.has(item.resource.name) &&
+        (item.resource.role || "") === gap.role &&
+        !isResourceOnProject(item.resource, gap.project)
+      )
+      .sort((a, b) => a.load - b.load || a.resource.name.localeCompare(b.resource.name))
+      .slice(0, gap.gap);
+
+    candidates.forEach((item) => usedResources.add(item.resource.name));
+    return candidates.map((item) => ({
+      project: gap.project,
+      role: gap.role,
+      resource: item.resource,
+      load: item.load,
+      day: item.openSlot.day,
+      period: item.openSlot.period
+    }));
+  }).slice(0, 12);
+}
+
+function firstOpenSlot(resource, week) {
+  for (const day of week.days) {
+    const assignment = resource.assignments?.[day.key] || {};
+    for (const period of ["am", "pm"]) {
+      if (!assignment[period]) return { day, period };
+    }
+  }
+  return null;
+}
+
+function isResourceOnProject(resource, project) {
+  return Object.values(resource.assignments || {}).some((day) => day.am === project || day.pm === project);
+}
+
+function applyAssistantSuggestion(button) {
+  if (!requirePermission("change", "You need change authorization to apply planning suggestions.")) return;
+  const week = currentWeek();
+  const resource = week.resources.find((item) => item.name === button.dataset.resource);
+  const day = week.days.find((item) => item.key === button.dataset.day);
+  const period = button.dataset.period;
+  const project = button.dataset.project;
+  if (!resource || !day || !["am", "pm"].includes(period) || !project) return;
+  const slot = resource.assignments[day.key] || {};
+  if (slot[period]) {
+    openInfoModal("Slot already planned", "This slot is no longer empty. Refresh the assistant suggestions.");
+    return;
+  }
+  slot[period] = project;
+  slot[`${period}Room`] = false;
+  slot[`${period}Note`] = "Assigned by planning assistant";
+  resource.assignments[day.key] = slot;
+  markSlotChanged(slot, period);
+  markResourceChanged(resource);
+  markWeekDraft(week);
+  saveDrafts();
+  state.activeSelection = { project, dayKey: day.key, period };
+  render();
+}
+
+function dashboardAttentionItems(week, resources, openSlots) {
+  const recipients = approvalMailRecipients(week).filter((item) =>
+    resources.some((resource) => resource.name === item.resource.name)
+  );
+  const demandGaps = projectDemandRows(week, resources).filter((row) => row.gap > 0);
+  const missingPersonMail = recipients.filter((item) => !item.to).length;
+  const missingManagerMail = recipients.filter((item) => item.manager && !item.cc).length;
+  const emptyPeople = resources.filter((resource) => plannedSlotCount(resource) === 0).length;
+  const items = [];
+  if (week.draft) {
+    items.push({ level: "warn", title: "Week is still draft", detail: "Approve the week before sending final plans." });
+  }
+  if (missingPersonMail) {
+    items.push({ level: "danger", title: "Missing consultant mail", detail: `${missingPersonMail} consultant${missingPersonMail === 1 ? "" : "s"} need an email address.` });
+  }
+  if (missingManagerMail) {
+    items.push({ level: "warn", title: "Missing manager mail", detail: `${missingManagerMail} manager CC address${missingManagerMail === 1 ? "" : "es"} missing.` });
+  }
+  if (demandGaps.length) {
+    const totalGap = demandGaps.reduce((sum, row) => sum + row.gap, 0);
+    items.push({ level: "danger", title: "Project demand gap", detail: `${totalGap} requested consultant${totalGap === 1 ? "" : "s"} not covered by the plan.` });
+  }
+  if (emptyPeople) {
+    items.push({ level: "info", title: "Unplanned consultants", detail: `${emptyPeople} consultant${emptyPeople === 1 ? "" : "s"} have no assignments this week.` });
+  }
+  if (openSlots) {
+    items.push({ level: "info", title: "Open capacity", detail: `${openSlots} half-day slot${openSlots === 1 ? "" : "s"} are still open.` });
+  }
+  return items;
+}
+
+function dashboardAvailableResources(resources) {
+  return resources
+    .map((resource) => ({ resource, slots: plannedSlotCount(resource) }))
+    .filter((item) => item.slots <= 4)
+    .sort((a, b) => a.slots - b.slots || a.resource.name.localeCompare(b.resource.name));
+}
+
+function plannedSlotCount(resource) {
+  return Object.values(resource.assignments || {}).reduce((count, day) => {
+    return count + (day.am ? 1 : 0) + (day.pm ? 1 : 0);
+  }, 0);
+}
+
+function countRoleSlots(resources) {
+  const counts = {};
+  resources.forEach((resource) => {
+    const role = resource.role || "Unknown";
+    counts[role] = (counts[role] || 0) + plannedSlotCount(resource);
+  });
+  return sortObject(counts);
 }
 
 function renderGrid(week, resources) {
@@ -919,6 +1440,108 @@ function renderPersonSummary() {
       <span class="legend-label">${escapeHtml(label)}</span>
       <strong>${formatDays(value)}d</strong>
       <span>${Math.round((value / totalDays) * 100)}%</span>
+    </div>
+  `).join("");
+}
+
+function renderConsultantProfile() {
+  const personName = state.consultantProfileName || uniquePeople()[0] || "";
+  if (!personName || !el.consultantProfileName) return;
+  const week = currentWeek();
+  const currentResource = week.resources.find((item) => item.name === personName)
+    || resourcesForUserDefinition().find((item) => item.name === personName);
+  if (!currentResource) return;
+
+  const user = userForResource(currentResource);
+  const manager = managerForResource(currentResource, user);
+  const weekSlots = plannedSlotCount(currentResource);
+  const yearWeeks = consultantYearWeeks();
+  const yearDistribution = countPersonTime(personName, yearWeeks);
+  const yearDays = Object.values(yearDistribution).reduce((sum, value) => sum + value, 0);
+  const history = consultantRecentWeeks(personName).slice(0, 8);
+
+  el.consultantProfileSelect.value = personName;
+  el.consultantProfileName.textContent = personName;
+  el.consultantProfileRole.textContent = currentResource.role || "-";
+  el.consultantProfileDetails.innerHTML = `
+    <div><span>Jira</span><strong>${escapeHtml(currentResource.jiraName || "-")}</strong></div>
+    <div><span>Email</span><strong>${escapeHtml(cleanMailAddress(user?.email) || "-")}</strong></div>
+    <div><span>Manager</span><strong>${escapeHtml(manager?.name || resourceManagerName(personName) || "-")}</strong></div>
+    <div><span>Status</span><strong>${currentResource.inactive ? "Inactive" : "Active"}</strong></div>
+  `;
+  el.consultantWeekLoad.textContent = `${formatDays(weekSlots / 2)}d`;
+  el.consultantOpenSlots.textContent = Math.max(0, (week.days.length * 2) - weekSlots);
+  el.consultantYearLoad.textContent = `${formatDays(yearDays)}d`;
+  el.consultantWeekMeta.textContent = week.title;
+  el.consultantWeekPlan.innerHTML = renderConsultantWeekPlan(week, currentResource);
+  el.consultantProjectMixMeta.textContent = `${parseWeekDate(week.title).getFullYear()} project distribution`;
+  renderProfilePie(el.consultantProjectPie, el.consultantProjectLegend, yearDistribution);
+  el.consultantHistoryMeta.textContent = `${history.length} week${history.length === 1 ? "" : "s"}`;
+  el.consultantHistoryList.innerHTML = history.length
+    ? history.map((item) => `
+      <div class="dashboard-list-row">
+        <strong>${escapeHtml(item.week.title)}</strong>
+        <span>${formatDays(item.days)}d planned · ${escapeHtml(item.projects.join(", ") || "No project")}</span>
+      </div>
+    `).join("")
+    : `<p class="dashboard-empty">No history found for this consultant.</p>`;
+}
+
+function renderConsultantWeekPlan(week, resource) {
+  return week.days.map((day) => {
+    const assignment = resource.assignments?.[day.key] || {};
+    return `
+      <div class="consultant-day-card">
+        <strong>${escapeHtml(day.label)}<span>${escapeHtml(day.date)}</span></strong>
+        <div><em>AM</em><span>${escapeHtml(assignment.am || "-")}</span>${assignment.amNote ? `<small>${escapeHtml(assignment.amNote)}</small>` : ""}</div>
+        <div><em>PM</em><span>${escapeHtml(assignment.pm || "-")}</span>${assignment.pmNote ? `<small>${escapeHtml(assignment.pmNote)}</small>` : ""}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function consultantYearWeeks() {
+  const selectedDate = parseWeekDate(currentWeek().title);
+  return state.data.weeks.filter((week) => parseWeekDate(week.title).getFullYear() === selectedDate.getFullYear());
+}
+
+function consultantRecentWeeks(personName) {
+  return state.data.weeks
+    .map((week) => {
+      const resource = week.resources.find((item) => item.name === personName);
+      if (!resource) return null;
+      const distribution = countPersonTime(personName, [week]);
+      const days = Object.values(distribution).reduce((sum, value) => sum + value, 0);
+      return { week, days, projects: Object.keys(distribution) };
+    })
+    .filter(Boolean);
+}
+
+function renderProfilePie(chart, legend, data) {
+  const colors = ["#0b6bcb", "#2aa876", "#e0a019", "#c0392b", "#6f42c1", "#00838f", "#8d6e63", "#455a64"];
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+  if (!total) {
+    chart.style.background = "#e6edf3";
+    chart.innerHTML = `<span class="dashboard-pie-empty">No data</span>`;
+    legend.innerHTML = `<p class="dashboard-empty">No project data for this year.</p>`;
+    return;
+  }
+  let cursor = 0;
+  const slices = entries.map(([, value], index) => {
+    const start = cursor;
+    const end = cursor + (value / total) * 100;
+    cursor = end;
+    return `${colors[index % colors.length]} ${start}% ${end}%`;
+  });
+  chart.style.background = `conic-gradient(${slices.join(", ")})`;
+  chart.innerHTML = `<span class="dashboard-pie-total"><strong>${formatDays(total)}</strong><em>Days</em></span>`;
+  legend.innerHTML = entries.map(([label, value], index) => `
+    <div class="dashboard-pie-row">
+      <span class="legend-swatch" style="background:${colors[index % colors.length]}"></span>
+      <span class="legend-label" title="${escapeAttr(label)}">${escapeHtml(label)}</span>
+      <strong>${formatDays(value)}d</strong>
+      <span>${Math.round((value / total) * 100)}%</span>
     </div>
   `).join("");
 }
@@ -1336,12 +1959,6 @@ function openPlanningForm(context) {
 }
 
 function onModalInput(event) {
-  if (event.target.classList?.contains("weekly-mail-to") || event.target.classList?.contains("weekly-mail-cc")) {
-    event.target.classList.remove("input-error");
-    const error = document.querySelector("#weeklyMailError");
-    if (error) error.textContent = "";
-    return;
-  }
   if (event.target.id === "resourceSearch") {
     filterResourceRows(event.target.value);
     return;
@@ -1401,6 +2018,9 @@ function onModalAction(event) {
   if (action === "project-delete") deleteProject(event.target.dataset.project);
   if (action === "project-toggle-active") toggleProjectActive(event.target.dataset.project);
   if (action === "project-manager") openProjectManager();
+  if (action === "project-demand-manager") openProjectDemandManager(event.target.dataset.project || "");
+  if (action === "project-demand-save") saveProjectDemand();
+  if (action === "project-demand-clear") clearProjectDemand(event.target.dataset.project, event.target.dataset.role);
   if (action === "projects-export") exportProjectsToExcel();
   if (action === "projects-import") openImportFile("projects");
   if (action === "admin-edit-user") openAuthorizationForm(event.target.dataset.userId);
@@ -1419,10 +2039,34 @@ function onModalAction(event) {
   if (action === "weekly-mail-preview-toggle") toggleWeeklyMailPreview(event.target);
   if (action === "weekly-mail-copy") copyWeeklyMail(event.target);
   if (action === "weekly-mail-send") sendWeeklyApprovalMails();
+  if (action === "weekly-mail-edit-address") openWeeklyMailAddressForm(event.target);
+  if (action === "weekly-mail-address-save") saveWeeklyMailAddress();
   if (action === "open-change-password") openChangePassword();
   if (action === "password-change-save") savePasswordChange();
   if (action === "password-forgot-save") handleForgotPassword();
   if (action === "toggle-notes-column") toggleNotesColumn();
+}
+
+function onDashboardAction(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "project-demand-manager") openProjectDemandManager(button.dataset.project || "");
+  if (button.dataset.action === "open-consultant-profile") {
+    state.consultantProfileName = button.dataset.person || "";
+    setView("consultantProfile");
+    render();
+  }
+}
+
+function onAssistantAction(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "assistant-apply") applyAssistantSuggestion(button);
+  if (button.dataset.action === "open-consultant-profile") {
+    state.consultantProfileName = button.dataset.person || "";
+    setView("consultantProfile");
+    render();
+  }
 }
 
 function toggleNotesColumn() {
@@ -1587,7 +2231,7 @@ function importUsers(rows) {
       skipped += 1;
       return;
     }
-    const email = cellValue(row, "Email").trim();
+    const email = cleanMailAddress(cellValue(row, "Email"));
     const role = cellValue(row, "Role").trim();
     const managerName = cellValue(row, "Manager").trim();
     const match = userByIdentity().get(normalizeKey(username))
@@ -1810,6 +2454,7 @@ function openProjectManager() {
               ${definition.inactive ? `<em>Inactive</em>` : ""}
             </div>
             <div class="resource-actions">
+              <button type="button" data-action="project-demand-manager" data-project="${escapeAttr(project)}">Demand</button>
               <button type="button" data-action="project-edit" data-project="${escapeAttr(project)}">Edit</button>
               <button type="button" data-action="project-toggle-active" data-project="${escapeAttr(project)}">${definition.inactive ? "Activate" : "Inactivate"}</button>
               <button class="danger" type="button" data-action="project-delete" data-project="${escapeAttr(project)}">Delete</button>
@@ -1823,6 +2468,91 @@ function openProjectManager() {
     </div>
   `;
   el.projectModal.classList.remove("hidden");
+}
+
+function openProjectDemandManager(selectedProject = "") {
+  if (!requirePermission("change", "You need change authorization to manage project demands.")) return;
+  const week = currentWeek();
+  const projects = activeProjects();
+  const roles = state.data.roles?.length ? state.data.roles : DEFAULT_ROLES;
+  const project = selectedProject && projects.includes(selectedProject) ? selectedProject : projects[0] || "";
+  const resources = week.resources.filter((resource) => !resource.inactive);
+  const rows = projectDemandRows(week, resources);
+  state.planningContext = { action: "project-demand-manager", weekId: week.id };
+  el.modalTitle.textContent = "Project demands";
+  el.modalMeta.textContent = `${week.title} weekly demand`;
+  el.modalBody.innerHTML = `
+    <div class="plan-form">
+      <div class="modal-summary">
+        <strong>Weekly project demand</strong>
+        <span>Enter how many consultants are needed for a project and role. Dashboard compares this demand with the current plan.</span>
+      </div>
+      <label>
+        <span>Project</span>
+        <select id="demandProject">
+          ${projects.map((item) => `<option value="${escapeAttr(item)}" ${item === project ? "selected" : ""}>${escapeHtml(item)}</option>`).join("")}
+        </select>
+      </label>
+      <label>
+        <span>Role</span>
+        <select id="demandRole">
+          ${roles.map((role) => `<option value="${escapeAttr(role)}">${escapeHtml(role)}</option>`).join("")}
+        </select>
+      </label>
+      <label>
+        <span>Needed consultants</span>
+        <input id="demandPeople" type="number" min="0" step="1" placeholder="0">
+      </label>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="project-manager">Projects</button>
+        <button type="button" data-action="project-demand-save" ${projects.length && roles.length ? "" : "disabled"}>Save demand</button>
+      </div>
+      <div class="demand-list">
+        ${rows.length ? rows.map((row) => `
+          <div class="demand-row ${row.gap > 0 ? "danger" : row.gap < 0 ? "info" : ""}">
+            <div>
+              <strong>${escapeHtml(row.project)} - ${escapeHtml(row.role)}</strong>
+              <span>Needed ${row.required}, planned ${row.planned}</span>
+            </div>
+            <div class="resource-actions">
+              <span>${row.gap > 0 ? `${row.gap} open` : row.gap < 0 ? `${Math.abs(row.gap)} extra` : "Covered"}</span>
+              <button class="danger" type="button" data-action="project-demand-clear" data-project="${escapeAttr(row.project)}" data-role="${escapeAttr(row.role)}">Clear</button>
+            </div>
+          </div>
+        `).join("") : `<p class="eyebrow">No demands defined for this week.</p>`}
+      </div>
+    </div>
+  `;
+  el.projectModal.classList.remove("hidden");
+}
+
+function saveProjectDemand() {
+  if (!requirePermission("change", "You need change authorization to save project demands.")) return;
+  const week = currentWeek();
+  const project = document.querySelector("#demandProject")?.value || "";
+  const role = document.querySelector("#demandRole")?.value || "";
+  const value = Math.max(0, Math.floor(Number(document.querySelector("#demandPeople")?.value || 0)));
+  if (!project || !role) return;
+  const demand = projectWeekDemand(project, week.id);
+  if (value > 0) {
+    demand[role] = value;
+  } else {
+    delete demand[role];
+  }
+  saveProjectDefinitions();
+  render();
+  openProjectDemandManager(project);
+}
+
+function clearProjectDemand(project, role) {
+  if (!requirePermission("change", "You need change authorization to clear project demands.")) return;
+  const week = currentWeek();
+  if (!project || !role) return;
+  const demand = projectWeekDemand(project, week.id);
+  delete demand[role];
+  saveProjectDefinitions();
+  render();
+  openProjectDemandManager(project);
 }
 
 function openProjectForm(mode, projectName = "") {
@@ -1892,7 +2622,15 @@ function saveProject() {
   }
 
   state.data.projects = Array.from(new Set(state.data.projects)).sort();
-  state.data.projectMeta[name] = { manager, budgetDays, inactive, deleted: false };
+  const previousDefinition = context.originalName ? projectDefinition(context.originalName) : projectDefinition(name);
+  state.data.projectMeta[name] = {
+    ...previousDefinition,
+    manager,
+    budgetDays,
+    inactive,
+    deleted: false,
+    demands: previousDefinition.demands || {}
+  };
   if (context.originalName && context.originalName !== name) {
     delete state.data.projectMeta[context.originalName];
   }
@@ -1995,7 +2733,6 @@ function openResourceManager() {
             <div>
               <strong>${escapeHtml(resource.name)}</strong>
               <span>${escapeHtml(resource.role || "-")} - ${escapeHtml(resource.jiraName || "-")}</span>
-              <span>User: ${linkedUser ? escapeHtml(linkedUser.name) : "Not linked"}</span>
               <span>Manager: ${resourceManagerName(resource.name) ? escapeHtml(resourceManagerName(resource.name)) : "-"}</span>
               ${resource.inactive ? `<em>Inactive</em>` : ""}
             </div>
@@ -2577,26 +3314,18 @@ function openWeeklyApprovalMailDialog() {
             <div class="mail-recipient-head">
               <div>
                 <strong>${escapeHtml(item.resource.name)}</strong>
-                <em>${item.manager ? `Manager: ${escapeHtml(item.manager.name || "-")}` : "No manager CC"}</em>
+                ${item.to ? `<span class="mail-address-line">Mail: ${formatMailAddress(item.to)}</span>` : ""}
+                <em>${item.manager ? `Manager: ${escapeHtml(item.manager.name || "-")}${item.cc ? ` - ${formatMailAddress(item.cc)}` : ""}` : "No manager CC"}</em>
+                ${mailRecipientWarningButtons(item)}
               </div>
               <div class="mail-row-actions">
                 <button type="button" data-action="weekly-mail-preview-toggle" data-resource="${escapeAttr(item.resource.name)}">Preview</button>
                 <button type="button" data-action="weekly-mail-copy" data-resource="${escapeAttr(item.resource.name)}">Copy</button>
                 <label class="mail-send-toggle">
                   <input class="weekly-mail-recipient" type="checkbox" value="${escapeAttr(item.resource.name)}" checked>
-                  <span>Mail iletilecek</span>
+                  <span class="mail-switch" aria-hidden="true"></span>
                 </label>
               </div>
-            </div>
-            <div class="mail-address-grid">
-              <label class="mail-address-field">
-                <span>To</span>
-                <input class="weekly-mail-to" type="email" value="${escapeAttr(item.to || "")}" data-resource="${escapeAttr(item.resource.name)}" placeholder="mail@company.com">
-              </label>
-              <label class="mail-address-field">
-                <span>CC</span>
-                <input class="weekly-mail-cc" type="email" value="${escapeAttr(item.cc || "")}" data-resource="${escapeAttr(item.resource.name)}" data-manager-required="${item.manager ? "true" : "false"}" placeholder="${item.manager ? "manager@company.com" : "Optional"}">
-              </label>
             </div>
             <div id="weeklyMailPreview-${escapeAttr(item.resource.name)}" class="mail-preview compact hidden">${buildWeeklyPlanMailHtml(week, item.resource)}</div>
           </div>
@@ -2607,7 +3336,7 @@ function openWeeklyApprovalMailDialog() {
     <p id="weeklyMailSuccess" class="form-success"></p>
     <div class="modal-actions">
       <button class="secondary" type="button" data-action="close-modal">Cancel</button>
-      <button type="button" data-action="weekly-mail-send" ${recipients.length ? "" : "disabled"}>Send</button>
+      <button type="button" data-action="weekly-mail-send" ${recipients.length ? "" : "disabled"}>Create EML</button>
     </div>
   `;
   el.projectModal.classList.remove("hidden");
@@ -2617,6 +3346,97 @@ function setWeeklyApprovalMailSelection(checked) {
   document.querySelectorAll(".weekly-mail-recipient").forEach((input) => {
     input.checked = checked;
   });
+}
+
+function formatMailAddress(value) {
+  const email = cleanMailAddress(value);
+  return escapeHtml(email);
+}
+
+function cleanMailAddress(value) {
+  const email = String(value || "").trim();
+  return email.includes("@") ? email : "";
+}
+
+function mailRecipientWarnings(item) {
+  const warnings = [];
+  if (!item.to) warnings.push("Kişi maili eksik.");
+  if (item.manager && !item.cc) warnings.push("Yönetici maili eksik.");
+  return warnings;
+}
+
+function mailRecipientWarningButtons(item) {
+  const buttons = [];
+  if (!item.to) {
+    buttons.push(`
+      <button class="mail-warning" type="button" data-action="weekly-mail-edit-address" data-user-id="${escapeAttr(item.user?.id || "")}" data-resource="${escapeAttr(item.resource.name)}" data-address-kind="person">
+        Kişi maili eksik
+      </button>
+    `);
+  }
+  if (item.manager && !item.cc) {
+    buttons.push(`
+      <button class="mail-warning" type="button" data-action="weekly-mail-edit-address" data-user-id="${escapeAttr(item.manager.id || "")}" data-resource="${escapeAttr(item.resource.name)}" data-address-kind="manager">
+        Yönetici maili eksik
+      </button>
+    `);
+  }
+  return buttons.join("");
+}
+
+function openWeeklyMailAddressForm(button) {
+  const week = currentWeek();
+  if (!week || state.planningContext?.action !== "weekly-mail-approval") return;
+  const resourceName = button.dataset.resource || "";
+  const kind = button.dataset.addressKind || "person";
+  const userId = button.dataset.userId || "";
+  const user = state.users.find((item) => item.id === userId);
+  const displayName = user?.name || resourceName;
+  state.planningContext = {
+    ...state.planningContext,
+    addressEdit: { userId: user?.id || "", resourceName, kind }
+  };
+  el.modalTitle.textContent = kind === "manager" ? "Manager mail" : "Person mail";
+  el.modalMeta.textContent = `${displayName} - ${resourceName}`;
+  el.modalBody.innerHTML = `
+    <form class="plan-form">
+      <label>
+        <span>Email</span>
+        <input id="weeklyMailAddressInput" type="email" value="${escapeAttr(user?.email || "")}" placeholder="mail@company.com">
+      </label>
+      <p id="weeklyMailAddressError" class="form-error"></p>
+      <div class="modal-actions">
+        <button class="secondary" type="button" data-action="approve-week-yes">Cancel</button>
+        <button type="button" data-action="weekly-mail-address-save">Save</button>
+      </div>
+    </form>
+  `;
+}
+
+function saveWeeklyMailAddress() {
+  const edit = state.planningContext?.addressEdit;
+  if (!edit) return;
+  const input = document.querySelector("#weeklyMailAddressInput");
+  const email = input?.value.trim() || "";
+  if (!email || !input.validity.valid) {
+    const error = document.querySelector("#weeklyMailAddressError");
+    if (error) error.textContent = "Geçerli bir mail adresi gir.";
+    input?.focus();
+    return;
+  }
+  let user = state.users.find((item) => item.id === edit.userId);
+  if (!user && edit.kind === "person") {
+    const resource = resourcesForUserDefinition().find((item) => item.name === edit.resourceName);
+    if (!resource) return;
+    user = { ...defaultUserForResource(resource), id: makeId("user") };
+    state.users.push(user);
+  }
+  if (!user) return;
+  user.email = email;
+  saveUsers();
+  syncResourceUsers();
+  state.planningContext.addressEdit = null;
+  openWeeklyApprovalMailDialog();
 }
 
 function toggleWeeklyMailPreview(button) {
@@ -2630,15 +3450,16 @@ function copyWeeklyMail(button) {
   const row = button.closest(".mail-recipient-row");
   if (!row) return;
   const name = row.querySelector(".weekly-mail-recipient")?.value || "";
-  const to = row.querySelector(".weekly-mail-to")?.value.trim() || "";
-  const cc = row.querySelector(".weekly-mail-cc")?.value.trim() || "";
-  const preview = row.querySelector(".mail-preview");
+  const week = currentWeek();
+  const recipient = week ? approvalMailRecipients(week).find((item) => item.resource.name === name) : null;
+  const to = recipient?.to || "";
+  const cc = recipient?.cc || "";
   const text = [
     `To: ${to || "-"}`,
     `CC: ${cc || "-"}`,
-    `Subject: Weekly work plan - ${currentWeek()?.title || ""}`,
+    `Subject: Weekly work plan - ${week?.title || ""}`,
     "",
-    htmlToPlainText(preview?.innerHTML || "")
+    week && recipient ? buildWeeklyPlanMailText(week, recipient.resource) : ""
   ].join("\n");
 
   navigator.clipboard?.writeText(text)
@@ -2649,7 +3470,7 @@ function copyWeeklyMail(button) {
     .catch(() => {
       const success = document.querySelector("#weeklyMailSuccess");
       if (success) success.textContent = "Copy was blocked by the browser. Select the preview text and press Ctrl+C.";
-      preview?.classList.remove("hidden");
+      row.querySelector(".mail-preview")?.classList.remove("hidden");
     });
 }
 
@@ -2668,27 +3489,16 @@ function sendWeeklyApprovalMails() {
   const missing = [];
   const addressByName = new Map();
   const ccByName = new Map();
-  document.querySelectorAll(".weekly-mail-to").forEach((input) => {
-    if (!selectedNames.includes(input.dataset.resource)) return;
-    const value = input.value.trim();
-    addressByName.set(input.dataset.resource, value);
-    const invalid = !value || !input.validity.valid;
-    input.classList.toggle("input-error", invalid);
-    if (invalid) missing.push(`${input.dataset.resource} To`);
-  });
-  document.querySelectorAll(".weekly-mail-cc").forEach((input) => {
-    if (!selectedNames.includes(input.dataset.resource)) return;
-    const value = input.value.trim();
-    ccByName.set(input.dataset.resource, value);
-    const required = input.dataset.managerRequired === "true";
-    const invalid = (required && !value) || (value && !input.validity.valid);
-    input.classList.toggle("input-error", invalid);
-    if (invalid) missing.push(`${input.dataset.resource} CC`);
+  approvalMailRecipients(week).forEach((item) => {
+    if (!selectedNames.includes(item.resource.name)) return;
+    addressByName.set(item.resource.name, item.to || "");
+    ccByName.set(item.resource.name, item.cc || "");
+    if (!item.to) missing.push(`${item.resource.name} kişi maili`);
+    if (item.manager && !item.cc) missing.push(`${item.resource.name} yönetici maili`);
   });
   if (missing.length) {
     const error = document.querySelector("#weeklyMailError");
-    if (error) error.textContent = `Please enter valid mail addresses for: ${missing.join(", ")}`;
-    document.querySelector(".weekly-mail-to.input-error, .weekly-mail-cc.input-error")?.focus();
+    if (error) error.textContent = `Eksik mail adresleri var: ${missing.join(", ")}`;
     return;
   }
 
@@ -2699,11 +3509,12 @@ function sendWeeklyApprovalMails() {
   week.approvedByEmail = mailSenderAddress();
   week.approvedAt = new Date().toISOString();
   queueWeeklyApprovalEmails(week, selectedResources, addressByName, ccByName);
+  downloadWeeklyApprovalEmlFiles(week, selectedResources, addressByName, ccByName);
   saveDrafts();
   render();
   const success = document.querySelector("#weeklyMailSuccess");
   if (success) {
-    success.textContent = `${selectedResources.length} mail prepared and marked as Sent. Use Copy or Mail drafts to transfer the content to Outlook.`;
+    success.textContent = `${selectedResources.length} EML file prepared. Open the downloaded files with Outlook and send after review.`;
   }
   selectedNames.forEach((name) => {
     const row = Array.from(document.querySelectorAll(".mail-recipient-row"))
@@ -2723,8 +3534,8 @@ function queuePlanChangeEmails(week, resources, context, project, note) {
       type: "change",
       subject,
       from: mailSenderAddress(),
-      to: user?.email || resource.jiraName || "",
-      cc: manager?.email || "",
+      to: cleanMailAddress(user?.email) || cleanMailAddress(resource.jiraName),
+      cc: cleanMailAddress(manager?.email),
       html
     });
   });
@@ -2740,8 +3551,8 @@ function approvalMailRecipients(week) {
         resource,
         user,
         manager,
-        to: user?.email || resource.jiraName || "",
-        cc: manager?.email || ""
+        to: cleanMailAddress(user?.email) || cleanMailAddress(resource.jiraName),
+        cc: cleanMailAddress(manager?.email)
       };
     });
 }
@@ -2772,13 +3583,118 @@ function queueWeeklyApprovalEmails(
       type: "weekly",
       subject: `Weekly work plan - ${week.title}`,
       from: mailSenderAddress(),
-      to: addressByName.get(resource.name) || user?.email || resource.jiraName || "",
-      cc: ccByName.get(resource.name) || manager?.email || "",
-      status: "Sent",
-      sentAt: new Date().toISOString(),
+      to: cleanMailAddress(addressByName.get(resource.name)) || cleanMailAddress(user?.email) || cleanMailAddress(resource.jiraName),
+      cc: cleanMailAddress(ccByName.get(resource.name)) || cleanMailAddress(manager?.email),
       html: buildWeeklyPlanMailHtml(week, resource)
     });
   });
+}
+
+function downloadWeeklyApprovalEmlFiles(week, resources, addressByName = new Map(), ccByName = new Map()) {
+  resources.forEach((resource, index) => {
+    const user = userForResource(resource);
+    const manager = managerForResource(resource, user);
+    const mail = {
+      subject: `Weekly work plan - ${week.title}`,
+      from: mailSenderAddress(),
+      to: cleanMailAddress(addressByName.get(resource.name)) || cleanMailAddress(user?.email) || cleanMailAddress(resource.jiraName),
+      cc: cleanMailAddress(ccByName.get(resource.name)) || cleanMailAddress(manager?.email),
+      plainText: buildWeeklyPlanMailText(week, resource),
+      html: buildWeeklyPlanMailHtml(week, resource)
+    };
+    setTimeout(() => downloadEmlFile(mail, `${week.title}-${resource.name}.eml`), index * 250);
+  });
+}
+
+function downloadEmlFile(mail, filename) {
+  const boundary = `weekly-plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const headers = [
+    `From: ${formatEmlAddress(mail.from)}`,
+    `To: ${formatEmlAddress(mail.to)}`,
+    mail.cc ? `Cc: ${formatEmlAddress(mail.cc)}` : null,
+    `Subject: ${encodeEmlHeader(mail.subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`
+  ].filter(Boolean);
+  const eml = [
+    ...headers,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    mail.plainText || htmlToPlainText(mail.html),
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    buildEmlHtmlDocument(mail.html),
+    "",
+    `--${boundary}--`,
+    ""
+  ].join("\r\n");
+  const blob = new Blob([eml], { type: "message/rfc822;charset=utf-8" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = safeFilename(filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function formatEmlAddress(value) {
+  return String(value || "").replace(/[\r\n]/g, "").trim();
+}
+
+function encodeEmlHeader(value) {
+  const text = String(value || "").replace(/[\r\n]/g, " ").trim();
+  return /^[\x00-\x7F]*$/.test(text) ? text : `=?UTF-8?B?${btoa(unescape(encodeURIComponent(text)))}?=`;
+}
+
+function buildEmlHtmlDocument(html) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { margin: 0; background: #f4f7fb; font-family: Arial, sans-serif; color: #1f2933; }
+      .mail-template { max-width: 920px; margin: 0; background: #ffffff; border: 1px solid #dce4ee; border-radius: 10px; overflow: hidden; font-size: 13px; }
+      .mail-hero { background: #10233f; border-top: 4px solid #d71920; color: #ffffff; padding: 10px 16px; }
+      .mail-brand-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+      .mail-brand-copy { min-width: 0; }
+      .mail-logo-block { flex: 0 0 190px; text-align: right; }
+      .mail-logo { width: 150px; max-width: 100%; height: auto; border: 0; padding: 0; }
+      .mail-logo-caption { display: block; margin-top: 3px; color: #dce6f3; font-size: 9px; line-height: 1.2; white-space: nowrap; }
+      .mail-kicker { margin: 0 0 3px; color: #b9c7da; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+      .mail-hero h2 { margin: 0; color: #ffffff; font-size: 17px; line-height: 1.18; }
+      .mail-hero p { margin: 4px 0 0; color: #e8eef7; font-size: 11px; }
+      .mail-body { padding: 14px 16px 18px; }
+      .mail-greeting { margin: 0 0 10px; color: #334e68; font-size: 12px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #d8e0e7; padding: 7px; text-align: left; vertical-align: top; font-size: 12px; }
+      th { background: #eef3f8; color: #10233f; }
+      .weekly-plan-table thead th { background: #10233f; color: #ffffff; border-color: #10233f; }
+      .weekly-plan-table tbody th { background: #f7f9fc; color: #d71920; }
+      .weekly-plan-table strong { color: #10233f; }
+      .mail-cell-detail { display: block; margin-top: 5px; color: #334e68; font-size: 11px; line-height: 1.35; }
+      .mail-cell-label { display: inline-block; margin-right: 4px; color: #d71920; font-weight: 700; }
+      .mail-note-list { display: grid; gap: 6px; color: #334e68; font-size: 12px; line-height: 1.35; }
+      .mail-footer { border-top: 1px solid #e2e8f0; color: #66788a; font-size: 11px; margin: 14px 0 0; padding-top: 10px; }
+    </style>
+  </head>
+  <body>${html}</body>
+</html>`;
+}
+
+function safeFilename(value) {
+  return String(value || "weekly-plan.eml")
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function addMailDraft(draft) {
@@ -2853,6 +3769,47 @@ function htmlToPlainText(html) {
   return doc.body.textContent.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function buildWeeklyPlanMailText(week, resource) {
+  const lines = [
+    `${week.title} Weekly Work Plan`,
+    "",
+    `Hello ${resource.name}, your approved weekly plan is below.`,
+    "",
+    ["Period", ...week.days.map((day) => `${day.label} ${day.date}`), "Notes"].join(" | "),
+    ["---", ...week.days.map(() => "---"), "---"].join(" | ")
+  ];
+  ["am", "pm"].forEach((period) => {
+    const cells = week.days.map((day) => weeklyPlanSlotText(week, resource, day, period));
+    lines.push([period.toUpperCase(), ...cells, period === "am" ? weeklyPlanGeneralNoteText(resource) : "-"].join(" | "));
+  });
+  lines.push("");
+  lines.push(`Approved by ${week.approvedBy || "-"} on ${formatAuditDate(week.approvedAt)}.`);
+  return lines.join("\n");
+}
+
+function weeklyPlanSlotText(week, resource, day, period) {
+  const slot = resource.assignments[day.key] || {};
+  const project = slot[period] || "-";
+  const note = slot[`${period}Note`];
+  const together = weeklyPlanTogetherPeople(week, resource, day, period, project);
+  const details = [
+    together.length ? `Together: ${together.join(", ")}` : "",
+    note ? `Note: ${note}` : ""
+  ].filter(Boolean);
+  return details.length ? `${project} (${details.join("; ")})` : project;
+}
+
+function weeklyPlanGeneralNoteText(resource) {
+  return resource.notes || "-";
+}
+
+function weeklyPlanTogetherPeople(week, resource, day, period, project) {
+  if (!project || project === "-") return [];
+  return week.resources
+    .filter((item) => item.name !== resource.name && item.assignments?.[day.key]?.[period] === project)
+    .map((item) => item.name);
+}
+
 function userForResource(resource) {
   const normalizedName = resource.name.toLowerCase();
   const normalizedJira = String(resource.jiraName || "").toLowerCase();
@@ -2884,32 +3841,74 @@ function buildPlanChangeMailHtml({ week, resource, context, project, note, manag
 function buildWeeklyPlanMailHtml(week, resource) {
   return `
     <article class="mail-template weekly-mail">
-      <h2>${escapeHtml(week.title)} Weekly Work Plan</h2>
-      <p>Hello ${escapeHtml(resource.name)}, your approved weekly plan is below.</p>
-      <table>
-        <thead><tr><th>Day</th><th>AM</th><th>PM</th><th>Notes</th></tr></thead>
-        <tbody>
-          ${week.days.map((day) => {
-            const slot = resource.assignments[day.key] || {};
-            return `
+      <div class="mail-hero">
+        <div class="mail-brand-row">
+          <div class="mail-brand-copy">
+            <p class="mail-kicker">FIT Global Weekly Planning</p>
+            <h2>${escapeHtml(week.title)} Weekly Work Plan</h2>
+            <p>Approved planning summary for ${escapeHtml(resource.name)}</p>
+          </div>
+          <div class="mail-logo-block">
+            <img class="mail-logo" src="${escapeAttr(mailLogoSrc())}" alt="FIT Global">
+            <span class="mail-logo-caption">SAP Silver Partner - Resource Planning</span>
+          </div>
+        </div>
+      </div>
+      <div class="mail-body">
+        <p class="mail-greeting">Hello ${escapeHtml(resource.name)}, your approved weekly plan is below.</p>
+        <table class="weekly-plan-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              ${week.days.map((day) => `<th>${escapeHtml(day.label)}<br><small>${escapeHtml(day.date)}</small></th>`).join("")}
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${["am", "pm"].map((period) => `
               <tr>
-                <td>${escapeHtml(day.label)}<br><small>${escapeHtml(day.date)}</small></td>
-                <td>${escapeHtml(slot.am || "-")}</td>
-                <td>${escapeHtml(slot.pm || "-")}</td>
-                <td>${escapeHtml([slot.amNote, slot.pmNote].filter(Boolean).join(" / ") || "-")}</td>
+                <th>${period.toUpperCase()}</th>
+                ${week.days.map((day) => weeklyPlanSlotHtml(week, resource, day, period)).join("")}
+                ${period === "am" ? `<td rowspan="2">${weeklyPlanGeneralNoteHtml(resource)}</td>` : ""}
               </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
-      <p class="mail-footer">Approved by ${escapeHtml(week.approvedBy || "-")} on ${escapeHtml(formatAuditDate(week.approvedAt))}.</p>
+            `).join("")}
+          </tbody>
+        </table>
+        <p class="mail-footer">Approved by ${escapeHtml(week.approvedBy || "-")} on ${escapeHtml(formatAuditDate(week.approvedAt))}.</p>
+      </div>
     </article>
   `;
 }
 
+function mailLogoSrc() {
+  return new URL("assets/fit-global-logo.jpg", window.location.href).href;
+}
+
+function weeklyPlanSlotHtml(week, resource, day, period) {
+  const slot = resource.assignments[day.key] || {};
+  const project = slot[period] || "-";
+  const note = slot[`${period}Note`];
+  const together = weeklyPlanTogetherPeople(week, resource, day, period, project);
+  return `
+    <td>
+      <strong>${escapeHtml(project)}</strong>
+      ${together.length ? `<span class="mail-cell-detail"><span class="mail-cell-label">Together</span>${escapeHtml(together.join(", "))}</span>` : ""}
+      ${note ? `<span class="mail-cell-detail"><span class="mail-cell-label">Note</span>${escapeHtml(note)}</span>` : ""}
+    </td>
+  `;
+}
+
+function weeklyPlanGeneralNoteHtml(resource) {
+  return resource.notes ? `<div class="mail-note-list">${escapeHtml(resource.notes)}</div>` : "-";
+}
+
 function loadUsers() {
   const saved = readJsonStore(USERS_KEY, []);
-  if (Array.isArray(saved) && saved.length) return saved.map(normalizeUser);
+  if (Array.isArray(saved) && saved.length) {
+    const normalized = saved.map(normalizeUser);
+    writeJsonStore(USERS_KEY, normalized);
+    return normalized;
+  }
   writeJsonStore(USERS_KEY, DEFAULT_USERS);
   return DEFAULT_USERS.map(normalizeUser);
 }
@@ -2921,6 +3920,7 @@ function normalizeUser(user) {
     id: user.id || makeId("user"),
     resourceName: user.resourceName || "",
     username: user.username || user.email || "",
+    email: cleanMailAddress(user.email),
     role: user.role || "",
     managerId: user.managerId || "",
     active: user.active !== false,
@@ -3260,7 +4260,7 @@ function openAdminPanel() {
           <div>
             <strong>${escapeHtml(user.name)}</strong>
             <span>${escapeHtml(user.username)} - ${escapeHtml(user.email || "-")}</span>
-            <span>Resource: ${escapeHtml(user.resourceName || "Not linked")}</span>
+            ${user.resourceName ? `<span>Resource: ${escapeHtml(user.resourceName)}</span>` : ""}
             <em>${managerLabel(user)} - ${permissionLabel(user)}${user.active === false ? " - Inactive" : ""}</em>
           </div>
           <div class="resource-actions">
@@ -3603,7 +4603,7 @@ function saveUser() {
   if (!context || context.action !== "user-form") return;
   const name = document.querySelector("#userName").value.trim();
   const username = document.querySelector("#userUsername").value.trim();
-  const email = document.querySelector("#userEmail").value.trim();
+  const email = cleanMailAddress(document.querySelector("#userEmail").value);
   const role = document.querySelector("#userRole").value.trim();
   const editingUser = context.mode === "edit"
     ? state.users.find((item) => item.id === context.userId) ||
@@ -3925,7 +4925,10 @@ function normalizeData(data) {
     .sort();
   projects.forEach((project) => {
     if (!projectMeta[project]) {
-      projectMeta[project] = { manager: "", budgetDays: "", inactive: false, deleted: false };
+      projectMeta[project] = { manager: "", budgetDays: "", demands: {}, inactive: false, deleted: false };
+    }
+    if (!projectMeta[project].demands || typeof projectMeta[project].demands !== "object") {
+      projectMeta[project].demands = {};
     }
   });
   return { ...data, weeks, projects, projectMeta };

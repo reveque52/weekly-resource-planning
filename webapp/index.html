@@ -99,25 +99,173 @@
 
       <main class="content">
         <header class="topbar">
-          <div>
-            <p class="eyebrow" id="updatedText">Updated</p>
-            <h2 id="pageTitle">Resource Plan</h2>
-          </div>
-          <div class="topbar-actions">
-            <div class="view-tabs" role="tablist" aria-label="Views">
-              <button class="active" id="gridTab" type="button" aria-label="Grid" title="Grid"><svg class="tab-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-              <button id="summaryTab" type="button">Summary</button>
-              <button id="personSummaryTab" type="button">Person Summary</button>
-              <button id="projectReportTab" type="button">Project Report</button>
-              <button id="orgTab" type="button">Organization</button>
+          <div class="topbar-main">
+            <div>
+              <p class="eyebrow" id="updatedText">Updated</p>
+              <h2 id="pageTitle">Resource Plan</h2>
             </div>
-            <div class="user-menu">
-              <button id="approveWeekButton" class="approve-button hidden" type="button">Approve draft</button>
-              <button id="currentUserButton" type="button"></button>
-              <button id="logoutButton" type="button">Sign out</button>
+            <div class="topbar-row">
+              <section class="welcome-card" aria-label="Welcome and weather">
+                <div>
+                  <p id="welcomeText" class="welcome-title">Hoş geldiniz</p>
+                  <span id="welcomeSubtext">Planlama ekranı hazır.</span>
+                </div>
+                <div class="weather-chip" aria-label="Weather">
+                  <div id="weatherScene" class="weather-scene weather-loading" aria-hidden="true">
+                    <span class="weather-sun"></span>
+                    <span class="weather-cloud cloud-one"></span>
+                    <span class="weather-cloud cloud-two"></span>
+                    <span class="weather-drop drop-one"></span>
+                    <span class="weather-drop drop-two"></span>
+                    <span class="weather-drop drop-three"></span>
+                    <span class="weather-snow snow-one"></span>
+                    <span class="weather-snow snow-two"></span>
+                    <span class="weather-bolt"></span>
+                  </div>
+                  <strong id="weatherTemp">--</strong>
+                  <span id="weatherLocation">Konum yükleniyor</span>
+                  <em id="weatherSummary">Hava durumu yükleniyor</em>
+                </div>
+              </section>
+              <div class="topbar-actions">
+                <div class="view-tabs" role="tablist" aria-label="Views">
+                  <button class="active" id="homeTab" type="button" aria-label="Home" title="Home"><svg class="tab-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path d="M3 10.5 12 3l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                  <button id="gridTab" type="button">Plan</button>
+                  <button id="assistantTab" type="button">Assistant</button>
+                  <button id="consultantProfileTab" type="button">Consultant Profile</button>
+                  <button id="personSummaryTab" type="button">Person Summary</button>
+                  <button id="projectReportTab" type="button">Project Report</button>
+                  <button id="orgTab" type="button">Organization</button>
+                </div>
+                <div class="user-menu">
+                  <button id="approveWeekButton" class="approve-button hidden" type="button">Approve draft</button>
+                  <button id="currentUserButton" type="button"></button>
+                  <button id="logoutButton" type="button">Sign out</button>
+                </div>
+              </div>
             </div>
           </div>
         </header>
+
+        <section id="homeView" class="dashboard-panel">
+          <div class="dashboard-hero">
+            <div>
+              <p class="eyebrow">Home</p>
+              <h3 id="dashboardTitle">Weekly dashboard</h3>
+              <span id="dashboardMeta">Current week overview</span>
+            </div>
+            <div id="dashboardStatus" class="dashboard-status">Draft</div>
+          </div>
+
+          <div class="dashboard-kpis">
+            <div class="dashboard-kpi">
+              <span>Consultants</span>
+              <strong id="dashboardResourceCount">0</strong>
+            </div>
+            <div class="dashboard-kpi">
+              <span>Planned slots</span>
+              <strong id="dashboardSlotCount">0</strong>
+            </div>
+            <div class="dashboard-kpi">
+              <span>Open slots</span>
+              <strong id="dashboardOpenSlotCount">0</strong>
+            </div>
+            <div class="dashboard-kpi">
+              <span>Projects</span>
+              <strong id="dashboardProjectCount">0</strong>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Attention</h3>
+                <span id="dashboardAttentionCount">0 items</span>
+              </div>
+              <div id="dashboardAttentionList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Available Consultants</h3>
+                <span id="dashboardAvailableCount">0 people</span>
+              </div>
+              <div id="dashboardAvailableList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Project Demands</h3>
+                <button type="button" data-action="project-demand-manager">Manage</button>
+              </div>
+              <div id="dashboardDemandList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Top Projects</h3>
+                <span id="dashboardTopProjectCount">0 projects</span>
+              </div>
+              <div class="dashboard-pie-layout">
+                <div id="dashboardTopProjectPie" class="dashboard-pie"></div>
+                <div id="dashboardTopProjectLegend" class="dashboard-pie-legend"></div>
+              </div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Role Capacity</h3>
+                <span id="dashboardRoleCount">0 roles</span>
+              </div>
+              <div class="dashboard-pie-layout">
+                <div id="dashboardRolePie" class="dashboard-pie"></div>
+                <div id="dashboardRoleLegend" class="dashboard-pie-legend"></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="assistantView" class="dashboard-panel hidden">
+          <div class="dashboard-hero">
+            <div>
+              <p class="eyebrow">Planning Assistant</p>
+              <h3 id="assistantTitle">Weekly recommendations</h3>
+              <span id="assistantMeta">Demand gaps and available consultants</span>
+            </div>
+            <button id="assistantRefreshButton" class="dashboard-action-button" type="button">Refresh</button>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Demand Gaps</h3>
+                <span id="assistantGapCount">0 gaps</span>
+              </div>
+              <div id="assistantGapList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Recommended Assignments</h3>
+                <span id="assistantSuggestionCount">0 suggestions</span>
+              </div>
+              <div id="assistantSuggestionList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>Available Capacity</h3>
+                <span id="assistantAvailableCount">0 people</span>
+              </div>
+              <div id="assistantAvailableList" class="dashboard-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <h3>How it decides</h3>
+                <span>Current filters</span>
+              </div>
+              <div class="assistant-rules">
+                <span>Matches project demand role with consultant role.</span>
+                <span>Prefers consultants with the lowest weekly load.</span>
+                <span>Uses the first open AM/PM slot in the selected week.</span>
+              </div>
+            </article>
+          </div>
+        </section>
 
         <section id="gridView" class="planning-panel">
           <div class="table-wrap">
@@ -125,19 +273,6 @@
               <thead id="planningHead"></thead>
               <tbody id="planningBody"></tbody>
             </table>
-          </div>
-        </section>
-
-        <section id="summaryView" class="summary-panel hidden">
-          <div class="summary-layout">
-            <div>
-              <h3>Project Load</h3>
-              <div id="projectBars" class="bars"></div>
-            </div>
-            <div>
-              <h3>Role Split</h3>
-              <div id="roleBars" class="bars compact"></div>
-            </div>
           </div>
         </section>
 
@@ -170,6 +305,70 @@
               <h3>Time Distribution</h3>
               <div id="personLegend" class="pie-legend"></div>
             </div>
+          </div>
+        </section>
+
+        <section id="consultantProfileView" class="summary-panel hidden">
+          <div class="person-summary-toolbar">
+            <label>
+              <span>Consultant</span>
+              <select id="consultantProfileSelect"></select>
+            </label>
+          </div>
+
+          <div class="consultant-profile-layout">
+            <article class="consultant-profile-card">
+              <div class="consultant-profile-head">
+                <div>
+                  <p class="eyebrow">Consultant</p>
+                  <h3 id="consultantProfileName">-</h3>
+                  <span id="consultantProfileRole">-</span>
+                </div>
+                <button type="button" id="consultantProfileEditButton">Edit</button>
+              </div>
+              <div id="consultantProfileDetails" class="consultant-detail-grid"></div>
+              <div class="consultant-metrics">
+                <div>
+                  <span>Current week</span>
+                  <strong id="consultantWeekLoad">0d</strong>
+                </div>
+                <div>
+                  <span>Open slots</span>
+                  <strong id="consultantOpenSlots">0</strong>
+                </div>
+                <div>
+                  <span>Year planned</span>
+                  <strong id="consultantYearLoad">0d</strong>
+                </div>
+              </div>
+            </article>
+
+            <article class="consultant-profile-card">
+              <div class="dashboard-card-head">
+                <h3>Current Week Plan</h3>
+                <span id="consultantWeekMeta">-</span>
+              </div>
+              <div id="consultantWeekPlan" class="consultant-week-plan"></div>
+            </article>
+
+            <article class="consultant-profile-card">
+              <div class="dashboard-card-head">
+                <h3>Project Mix</h3>
+                <span id="consultantProjectMixMeta">-</span>
+              </div>
+              <div class="dashboard-pie-layout">
+                <div id="consultantProjectPie" class="dashboard-pie"></div>
+                <div id="consultantProjectLegend" class="dashboard-pie-legend"></div>
+              </div>
+            </article>
+
+            <article class="consultant-profile-card">
+              <div class="dashboard-card-head">
+                <h3>Recent Weeks</h3>
+                <span id="consultantHistoryMeta">-</span>
+              </div>
+              <div id="consultantHistoryList" class="dashboard-list"></div>
+            </article>
           </div>
         </section>
 
